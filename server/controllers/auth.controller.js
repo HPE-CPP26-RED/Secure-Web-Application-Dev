@@ -76,14 +76,30 @@ const loginUser = async (req, res) => {
 };
 
 const googleLogin = async (req, res) => {
-  const { code } = req.body;
-  const { token, refreshToken, user } = await authService.googleLogin(code);
+  try {
+    const { code } = req.body;
+    const { token, refreshToken, user } = await authService.googleLogin(code);
 
-  setAuthCookies(res, token, refreshToken);
+    setAuthCookies(res, token, refreshToken);
 
-  logger.info({ event: "GOOGLE_LOGIN_SUCCESS", userId: user.user_id, ip: req.ip });
+    logger.info({ event: "GOOGLE_LOGIN_SUCCESS", userId: user.user_id, ip: req.ip });
 
-  res.json({ status: "success", user });
+    res.json({ status: "success", user });
+  } catch (error) {
+    logger.error({
+      event: "GOOGLE_LOGIN_ERROR",
+      message: error.message,
+      stack: error.stack,
+      body: {
+        code: req.body?.code ? "*** REDACTED_CODE ***" : undefined
+      }
+    });
+    
+    console.error("Google Auth Error:", error.message);
+    console.error("Stack Trace:", error.stack);
+
+    res.status(500).json({ status: "error", message: "Internal Server Error" });
+  }
 };
 
 const logoutUser = async (req, res) => {
