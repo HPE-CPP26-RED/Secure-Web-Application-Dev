@@ -101,7 +101,7 @@ const ForgotPasswordModal = () => {
                 disabled={isSending}
                 className="w-full sm:w-auto"
               >
-                {isSending ? <PulseLoader size={10} color={"#0a138b"} /> : "Send email"}
+                {isSending ? <PulseLoader size={10} color={"#01A982"} /> : "Send email"}
               </Button>
             </ModalFooter>
           </form>

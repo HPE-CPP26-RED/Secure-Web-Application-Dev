@@ -103,7 +103,7 @@ const ResetPassword = () => {
                 </HelperText>
               )}
               <Button type="submit" disabled={isResetting}>
-                {isResetting ? <PulseLoader size={10} color={"#0a138b"} /> : "Reset Password"}
+                {isResetting ? <PulseLoader size={10} color={"#01A982"} /> : "Reset Password"}
               </Button>
             </form>
           </div>

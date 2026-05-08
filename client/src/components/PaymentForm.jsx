@@ -33,7 +33,7 @@ const PaymentForm = ({ previousStep, addressData, nextStep }) => {
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
         amount: order.amount,
         currency: order.currency,
-        name: "PERN Store",
+        name: "Vantage",
         description: "Order Payment",
         order_id: order.id,
         prefill: {
@@ -74,7 +74,7 @@ const PaymentForm = ({ previousStep, addressData, nextStep }) => {
           },
         },
         theme: {
-          color: "#0a138b",
+          color: "#01A982",
         },
       };
 
@@ -107,7 +107,7 @@ const PaymentForm = ({ previousStep, addressData, nextStep }) => {
           size="small"
         >
           {isProcessing ? (
-            <PulseLoader size={10} color={"#0a138b"} />
+            <PulseLoader size={10} color={"#01A982"} />
           ) : (
             `Pay ${formatCurrency(cartSubtotal)}`
           )}

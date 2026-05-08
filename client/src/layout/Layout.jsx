@@ -7,35 +7,35 @@ const Layout = ({ children, title, loading }) => {
     <>
       <Helmet>
         <meta charSet="utf-8" />
-        <title>{title ?? "Home"} | PERN Store </title>
+        <title>{title ?? "Home"} | Vantage </title>
         <meta
           name="description"
-          content="E-commerce store built with React, Node, Express and Postgres"
+          content="Vantage Marketplace - Premium e-commerce experience"
         />
         <meta
           name="robots"
           content="max-snippet:-1, max-image-preview:large, max-video-preview:-1"
         />
-        <link rel="canonical" href="https://pern-store.netlify.app/" />
+        <link rel="canonical" href="https://vantage-marketplace.netlify.app/" />
         <meta property="og:locale" content="en_US" />
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="PERN Store" />
+        <meta property="og:title" content="Vantage" />
         <meta
           property="og:description"
-          content="E-commerce store built with React, Node, Express and Postgres"
+          content="Vantage Marketplace - Premium e-commerce experience"
         />
-        <meta property="og:url" content="https://pern-store.netlify.app/" />
-        <meta property="og:site_name" content="PERN Store" />
+        <meta property="og:url" content="https://vantage-marketplace.netlify.app/" />
+        <meta property="og:site_name" content="Vantage" />
         <meta property="og:image" content="android-chrome-512x512.png" />
         <meta property="og:image:secure_url" content="android-chrome-512x512.png" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:site" content="@_odunsi_" />
-        <meta name="twitter:creator" content="@_odunsi_" />
+        <meta name="twitter:site" content="@AravindKamath" />
+        <meta name="twitter:creator" content="@AravindKamath" />
         <meta
           name="twitter:description"
-          content="E-commerce store built with React, Node, Express and Postgres"
+          content="Vantage Marketplace - Premium e-commerce experience"
         />
-        <meta name="twitter:title" content="PERN Store" />
+        <meta name="twitter:title" content="Vantage" />
         <meta name="twitter:image" content="android-chrome-512x512.png" />
         <style type="text/css">{`
         html,body{
@@ -55,16 +55,16 @@ const Layout = ({ children, title, loading }) => {
           </div>
         )}
 
-        <footer className="mt-auto flex justify-center py-2">
-          <p className="text-sm text-gray-600 sm:ml-4 sm:pl-4 sm:py-2 sm:mt-0 mt-4">
-            &copy; {new Date().getFullYear()} PERN Store —
+        <footer className="mt-auto flex justify-center py-4 bg-[#121212] border-t border-gray-800">
+          <p className="text-sm text-gray-400 sm:ml-4 sm:pl-4 sm:py-2 sm:mt-0 mt-4">
+            &copy; {new Date().getFullYear()} Vantage —
             <a
-              href="https://github.com/dhatguy"
-              className="text-gray-500 ml-1"
+              href="https://github.com/AravindKamath"
+              className="text-white hover:text-[#01A982] ml-1 transition-colors"
               target="_blank"
               rel="noopener noreferrer"
             >
-              @dhatGuy
+              @AravindKamath
             </a>
           </p>
         </footer>

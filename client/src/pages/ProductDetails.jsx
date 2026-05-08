@@ -92,7 +92,7 @@ const ProductDetails = () => {
                       cssOverride={{
                         margin: "0 auto",
                       }}
-                      color="#123abc"
+                      color="#01A982"
                       size={20}
                     />
                   ) : (

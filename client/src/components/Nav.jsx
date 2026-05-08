@@ -11,23 +11,23 @@ const Nav = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   return (
-    <nav className="flex items-center justify-between px-2 lg:px-36 py-2 shadow-lg fixed w-full bg-white top-0 z-10">
-      <Link to="/" className="text-gray-700 text-2xl font-bold dark:text-gray-400">
-        <h1>PERN Store</h1>
+    <nav className="flex items-center justify-between px-2 lg:px-36 py-2 shadow-lg fixed w-full bg-[#121212] top-0 z-10 border-b border-gray-800">
+      <Link to="/" className="text-white text-2xl font-bold">
+        <h1>Vantage Marketplace</h1>
       </Link>
       <ul className="flex space-x-4">
         {!isLoggedIn && (
           <>
             <li>
               <Link to="/login">
-                <Button layout="link">
+                <Button layout="link" className="text-white hover:text-[#01A982]">
                   <span>login</span>
                 </Button>
               </Link>
             </li>
             <li>
               <Link to="/cart">
-                <Button layout="link">
+                <Button layout="link" className="text-white hover:text-[#01A982]">
                   <span className="lg:block hidden">Cart</span>
                   <ShoppingCart className="lg:hidden" />
                   <Badge className="ml-2" type="danger">
@@ -43,7 +43,7 @@ const Nav = () => {
           <>
             <li>
               <Link to="/cart">
-                <Button layout="link">
+                <Button layout="link" className="text-white hover:text-[#01A982]">
                   <span className="lg:block hidden">Cart</span>
                   <ShoppingCart className="lg:hidden" />
                   <Badge className="ml-2" type="danger">
@@ -53,7 +53,7 @@ const Nav = () => {
               </Link>
             </li>
             <li className="relative">
-              <Button layout="link" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
+              <Button layout="link" className="text-white hover:text-[#01A982]" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
                 <span className="lg:block hidden">Account</span>
                 <User className="lg:hidden" />
               </Button>

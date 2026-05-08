@@ -186,7 +186,7 @@ const Register = () => {
           </div>
           <Button type="submit" className="mt-4">
             {isLoading ? (
-              <PulseLoader color={"#0a138b"} size={10} loading={isLoading} />
+              <PulseLoader color={"#01A982"} size={10} loading={isLoading} />
             ) : (
               "Create Account"
             )}

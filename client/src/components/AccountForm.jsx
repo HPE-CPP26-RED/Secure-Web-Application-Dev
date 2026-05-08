@@ -112,7 +112,7 @@ const AccountForm = ({ setShowSettings, userData }) => {
           </div>
           <div className="px-4 py-5 space-x-4">
             <Button disabled={isSaving} type="submit">
-              {isSaving ? <PulseLoader color={"#0a138b"} size={10} loading={isSaving} /> : "Save"}
+              {isSaving ? <PulseLoader color={"#01A982"} size={10} loading={isSaving} /> : "Save"}
             </Button>
             <Button disabled={isSaving} onClick={() => setShowSettings(false)} layout="outline">
               Cancel

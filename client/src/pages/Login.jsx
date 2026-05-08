@@ -140,7 +140,7 @@ const Login = () => {
             <ForgotPasswordModal />
           </div>
           <Button type="submit" disabled={isLoading || isGoogleLoading}>
-            {isLoading ? <PulseLoader color={"#0a138b"} size={10} loading /> : "Login"}
+            {isLoading ? <PulseLoader color={"#01A982"} size={10} loading /> : "Login"}
           </Button>
           <Button
             type="button"
@@ -168,7 +168,7 @@ const Login = () => {
               ></path>
             </svg>
             {isGoogleLoading ? (
-              <PulseLoader color={"#0a138b"} size={10} loading />
+              <PulseLoader color={"#01A982"} size={10} loading />
             ) : (
               "Login in with Google"
             )}
