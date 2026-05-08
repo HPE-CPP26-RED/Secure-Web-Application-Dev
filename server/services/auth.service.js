@@ -87,7 +87,7 @@ class AuthService {
     const newUser = await createUserDb({ ...user, password: hashedPassword });
     const { id: cart_id } = await createCartDb(newUser.user_id);
 
-    const tokenPayload = { id: newUser.user_id, roles: newUser.roles, cart_id };
+    const tokenPayload = { id: newUser.user_id, role: newUser.role, cart_id };
     const token = this.signAccessToken(tokenPayload);
     const { rawToken: refreshToken, expiresAt } = this.signRefreshTokenRaw(tokenPayload);
 
@@ -107,6 +107,7 @@ class AuthService {
         fullname: newUser.fullname,
         username: newUser.username,
         email: newUser.email,
+        role: newUser.role,
       },
     };
   }
@@ -132,7 +133,7 @@ class AuthService {
       throw new ErrorHandler(403, "Please log in with Google");
     }
 
-    const { password: dbPassword, user_id, roles, cart_id, fullname, username } = user;
+    const { password: dbPassword, user_id, role, cart_id, fullname, username } = user;
     const isCorrectPassword = await bcrypt.compare(password, dbPassword);
 
     if (!isCorrectPassword) {
@@ -140,7 +141,7 @@ class AuthService {
       throw new ErrorHandler(401, "Email or password incorrect");
     }
 
-    const tokenPayload = { id: user_id, roles, cart_id };
+    const tokenPayload = { id: user_id, role, cart_id };
     const token = this.signAccessToken(tokenPayload);
     const { rawToken: refreshToken, expiresAt } = this.signRefreshTokenRaw(tokenPayload);
 
@@ -151,7 +152,7 @@ class AuthService {
     return {
       token,
       refreshToken,
-      user: { user_id, fullname, username },
+      user: { user_id, fullname, username, role },
     };
   }
 
@@ -170,9 +171,9 @@ class AuthService {
       await mail.signupMail(user.email, user.fullname.split(" ")[0]);
     }
 
-    const { user_id, cart_id, roles, fullname, username } = await getUserByEmailDb(email);
+    const { user_id, cart_id, role, fullname, username } = await getUserByEmailDb(email);
 
-    const tokenPayload = { id: user_id, roles, cart_id };
+    const tokenPayload = { id: user_id, role, cart_id };
     const token = this.signAccessToken(tokenPayload);
     const { rawToken: refreshToken, expiresAt } = this.signRefreshTokenRaw(tokenPayload);
 
@@ -180,7 +181,7 @@ class AuthService {
 
     logger.info({ event: "GOOGLE_LOGIN_SUCCESS", userId: user_id });
 
-    return { token, refreshToken, user: { user_id, fullname, username } };
+    return { token, refreshToken, user: { user_id, fullname, username, role } };
   }
 
   // ── Refresh Token Rotation ────────────────────────────────────────────────
@@ -210,7 +211,7 @@ class AuthService {
     await revokeRefreshTokenDb(rawRefreshToken);
 
     // 4. Issue a new pair
-    const tokenPayload = { id: payload.id, roles: payload.roles, cart_id: payload.cart_id };
+    const tokenPayload = { id: payload.id, role: payload.role, cart_id: payload.cart_id };
     const token = this.signAccessToken(tokenPayload);
     const { rawToken: newRefreshToken, expiresAt } = this.signRefreshTokenRaw(tokenPayload);
 
@@ -296,7 +297,7 @@ class AuthService {
 
   /**
    * Sign a short-lived RS256 access token (15 minutes).
-   * @param {object} data — { id, roles, cart_id }
+   * @param {object} data — { id, role, cart_id }
    * @returns {string} signed JWT
    */
   signAccessToken(data) {
@@ -309,7 +310,7 @@ class AuthService {
   /**
    * Sign a long-lived RS256 refresh token (7 days).
    * Returns both the raw token and its expiry Date for DB storage.
-   * @param {object} data — { id, roles, cart_id }
+   * @param {object} data — { id, role, cart_id }
    * @returns {{ rawToken: string, expiresAt: Date }}
    */
   signRefreshTokenRaw(data) {

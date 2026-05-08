@@ -12,22 +12,10 @@ const getAllProductsDb = async ({ limit, offset }) => {
   return products;
 };
 
-const createProductDb = async ({ name, price, description, image_url }) => {
+const createProductDb = async ({ name, slug, price, description, image_url, category }) => {
   const { rows: product } = await pool.query(
-    "INSERT INTO products(name, price, description, image_url) VALUES($1, $2, $3, $4) returning *",
-    [name, price, description, image_url]
-  );
-  return product[0];
-};
-
-const getProductDb = async ({ id }) => {
-  const { rows: product } = await pool.query(
-    `select products.*, trunc(avg(reviews.rating),1) as avg_rating, count(reviews.*) from products
-        LEFT JOIN reviews
-        ON products.product_id = reviews.product_id
-        where products.product_id = $1
-        group by products.product_id`,
-    [id]
+    "INSERT INTO products(name, slug, price, description, image_url, category) VALUES($1, $2, $3, $4, $5, $6) returning *",
+    [name, slug, price, description, image_url, category]
   );
   return product[0];
 };
@@ -56,28 +44,33 @@ const getProductByNameDb = async ({ name }) => {
   return product[0];
 };
 
-const updateProductDb = async ({ name, price, description, image_url, id }) => {
+const updateProductDb = async ({ name, slug, price, description, image_url, category, targetSlug }) => {
   const { rows: product } = await pool.query(
-    "UPDATE products set name = $1, price = $2, description = $3 image_url = $4 where product_id = $5 returning *",
-    [name, price, description, image_url, id]
+    "UPDATE products set name = $1, slug = $2, price = $3, description = $4, image_url = $5, category = $6 where slug = $7 returning *",
+    [name, slug, price, description, image_url, category, targetSlug]
   );
   return product[0];
 };
 
-const deleteProductDb = async ({ id }) => {
-  const { rows } = await pool.query(
-    "DELETE FROM products where product_id = $1 returning *",
-    [id]
+const deleteProductBySlugDb = async ({ slug }) => {
+  // First delete from cart_item to avoid any FK issues (though ON DELETE SET NULL is active)
+  await pool.query(
+    "DELETE FROM cart_item WHERE product_id = (SELECT product_id FROM products WHERE slug = $1)",
+    [slug]
   );
-  return rows[0];
+  
+  const result = await pool.query(
+    "DELETE FROM products where slug = $1 returning *",
+    [slug]
+  );
+  return result; // Return full result object for rowCount
 };
 
 module.exports = {
-  getProductDb,
   getProductByNameDb,
   createProductDb,
   updateProductDb,
-  deleteProductDb,
+  deleteProductBySlugDb,
   getAllProductsDb,
   getProductBySlugDb,
 };

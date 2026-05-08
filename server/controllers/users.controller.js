@@ -31,7 +31,7 @@ const createUser = async (req, res) => {
 const getUserById = async (req, res) => {
   const { id } = req.params;
   const isSelf = +id === req.user.id;
-  const isAdmin = req.user.roles && req.user.roles.includes("admin");
+  const isAdmin = req.user.role === "admin";
 
   if (!isSelf && !isAdmin) {
     logger.warn({
@@ -56,7 +56,7 @@ const getUserProfile = async (req, res) => {
 const updateUser = async (req, res) => {
   const { username, email, fullname, address, city, state, country } = req.body;
   const isSelf = +req.params.id === req.user.id;
-  const isAdmin = req.user.roles && req.user.roles.includes("admin");
+  const isAdmin = req.user.role === "admin";
 
   if (!isSelf && !isAdmin) {
     logger.warn({
@@ -84,7 +84,7 @@ const updateUser = async (req, res) => {
 const deleteUser = async (req, res) => {
   const { id } = req.params;
   const isSelf = +id === req.user.id;
-  const isAdmin = req.user.roles && req.user.roles.includes("admin");
+  const isAdmin = req.user.role === "admin";
 
   if (!isSelf && !isAdmin) {
     logger.warn({

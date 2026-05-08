@@ -21,6 +21,10 @@ const createProductSchema = Joi.object({
     "string.uri": "image_url must be a valid URL",
     "any.required": "image_url is required",
   }),
+  category: Joi.string().min(2).max(50).required().messages({
+    "string.min": "Category must be at least 2 characters",
+    "any.required": "Category is required",
+  }),
 });
 
 const updateProductSchema = Joi.object({

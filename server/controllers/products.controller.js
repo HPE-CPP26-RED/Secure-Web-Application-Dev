@@ -1,11 +1,11 @@
 /**
  * products.controller.js
- * All DB interactions now go through the proper DB layer (review.db.js).
- * Direct pool.query calls have been removed from this controller.
+ * Refactored to handle explicit slug generation and robust deletion.
  */
 const productService = require("../services/product.service");
 const { getReviewsDb, createReviewDb, updateReviewDb } = require("../db/review.db");
 const { ErrorHandler } = require("../helpers/error");
+const crypto = require("crypto");
 
 const getAllProducts = async (req, res) => {
   const { page = 1 } = req.query;
@@ -14,46 +14,77 @@ const getAllProducts = async (req, res) => {
 };
 
 const createProduct = async (req, res) => {
-  const newProduct = await productService.addProduct(req.body);
-  res.status(201).json(newProduct);
-};
+  try {
+    const { name, price, description, image_url, category } = req.body;
+    
+    // Explicit Type Coercion
+    const parsedPrice = Number(price);
+    
+    // Explicit Slug Generation
+    const baseSlug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    const slug = `${baseSlug}-${crypto.randomBytes(3).toString("hex")}`;
 
-const getProduct = async (req, res) => {
-  const product = await productService.getProductById(req.params);
-  res.status(200).json(product);
+    const newProduct = await productService.addProduct({ 
+      name, 
+      price: parsedPrice, 
+      description, 
+      image_url, 
+      category,
+      slug 
+    });
+    
+    res.status(201).json(newProduct);
+  } catch (error) {
+    console.error("CREATE_PRODUCT_ERROR:", error.message);
+    res.status(error.statusCode || 500).json({ error: error.message || "Internal Server Error" });
+  }
 };
 
 const getProductBySlug = async (req, res) => {
-  const product = await productService.getProductBySlug(req.params);
-  res.status(200).json(product);
-};
-
-const getProductByName = async (req, res) => {
-  const product = await productService.getProductByName(req.params);
-  res.status(200).json(product);
+  try {
+    const { slug } = req.params;
+    const product = await productService.getProductBySlug(slug);
+    res.status(200).json(product);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
 };
 
 const updateProduct = async (req, res) => {
-  const { name, price, description, image_url } = req.body;
-  const { id } = req.params;
-
-  const updatedProduct = await productService.updateProduct({
-    name,
-    price,
-    description,
-    image_url,
-    id,
-  });
-  res.status(200).json(updatedProduct);
+  try {
+    const { slug: targetSlug } = req.params;
+    const updatedProduct = await productService.updateProduct({ ...req.body, targetSlug });
+    res.status(200).json(updatedProduct);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
 };
 
 const deleteProduct = async (req, res) => {
-  const { id } = req.params;
-  const deletedProduct = await productService.removeProduct(id);
-  res.status(200).json(deletedProduct);
+  try {
+    const { slug } = req.params;
+    
+    const result = await productService.removeProduct(slug);
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+    
+    res.status(200).json({ 
+      message: "Product deleted successfully", 
+      product: result.rows[0] 
+    });
+  } catch (error) {
+    console.error("DELETE_PRODUCT_ERROR:", error.message);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
-// ── Reviews — delegated to DB layer ─────────────────────────────────────────
+// ── Reviews ─────────────────────────────────────────────────────────────────
 
 const getProductReviews = async (req, res) => {
   const { product_id, user_id } = req.query;
@@ -76,12 +107,10 @@ const updateProductReview = async (req, res) => {
 };
 
 module.exports = {
-  getProduct,
   createProduct,
   updateProduct,
   deleteProduct,
   getAllProducts,
-  getProductByName,
   getProductBySlug,
   getProductReviews,
   updateProductReview,

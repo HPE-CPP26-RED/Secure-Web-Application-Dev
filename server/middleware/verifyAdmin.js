@@ -9,16 +9,16 @@ const { ErrorHandler } = require("../helpers/error");
 const { logger } = require("../utils/logger");
 
 module.exports = (req, res, next) => {
-  const { roles, id } = req.user;
+  const { role, id } = req.user;
 
-  if (roles && roles.includes("admin")) {
+  if (role === "admin") {
     return next();
   }
 
   logger.warn({
     event: "RBAC_FAILURE",
     userId: id,
-    roles,
+    role,
     path: req.path,
     method: req.method,
     ip: req.ip,

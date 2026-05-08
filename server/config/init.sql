@@ -94,7 +94,7 @@ CREATE TABLE public.users
     fullname character varying(100) NOT NULL,
     username character varying(50) UNIQUE NOT NULL,
     google_id character varying(100) UNIQUE,
-    roles character varying(10)[] DEFAULT '{customer}'::character varying[] NOT NULL,
+    role character varying(10) DEFAULT 'user'::character varying NOT NULL,
     address character varying(200),
     city character varying(100),
     state character varying(100),

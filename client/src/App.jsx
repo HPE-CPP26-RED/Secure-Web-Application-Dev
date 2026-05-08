@@ -13,10 +13,12 @@ import {
   ProductList,
   Register,
   ResetPassword,
+  AdminDashboard,
 } from "pages";
 import { Suspense } from "react";
 import { Toaster } from "react-hot-toast";
 import { Route, Routes } from "react-router-dom";
+import { AdminRoute } from "routes/admin.route";
 import { ProtectedRoute } from "routes/protected.route";
 
 function App() {
@@ -36,6 +38,10 @@ function App() {
           <Route path="/cart/success" element={<Confirmation />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/orders/:id/" element={<OrderDetails />} />
+        </Route>
+
+        <Route element={<AdminRoute />}>
+          <Route path="/admin" element={<AdminDashboard />} />
         </Route>
 
         <Route path="/signup" element={<Register />} />

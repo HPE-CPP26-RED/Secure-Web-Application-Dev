@@ -1,9 +1,8 @@
 const {
   getAllProductsDb,
   createProductDb,
-  getProductDb,
   updateProductDb,
-  deleteProductDb,
+  deleteProductBySlugDb,
   getProductByNameDb,
   getProductBySlugDb,
 } = require("../db/product.db");
@@ -28,21 +27,9 @@ class ProductService {
     }
   };
 
-  getProductById = async (id) => {
-    try {
-      const product = await getProductDb(id);
-      if (!product) {
-        throw new ErrorHandler(404, "product not found");
-      }
-      return product;
-    } catch (error) {
-      throw new ErrorHandler(error.statusCode, error.message);
-    }
-  };
-
   getProductBySlug = async (slug) => {
     try {
-      const product = await getProductBySlugDb(slug);
+      const product = await getProductBySlugDb({ slug });
       if (!product) {
         throw new ErrorHandler(404, "product not found");
       }
@@ -54,10 +41,11 @@ class ProductService {
 
   getProductByName = async (name) => {
     try {
-      const product = await getProductByNameDb(name);
+      const product = await getProductByNameDb({ name });
       if (!product) {
         throw new ErrorHandler(404, "product not found");
       }
+      return product;
     } catch (error) {
       throw new ErrorHandler(error.statusCode, error.message);
     }
@@ -65,25 +53,22 @@ class ProductService {
 
   updateProduct = async (data) => {
     try {
-      const product = await getProductDb(data.id);
+      const product = await getProductBySlugDb({ slug: data.targetSlug });
       if (!product) {
         throw new ErrorHandler(404, "product not found");
       }
-      return await updateProductDb(data);
+      return await updateProductDb({ ...product, ...data });
     } catch (error) {
       throw new ErrorHandler(error.statusCode, error.message);
     }
   };
 
-  removeProduct = async (id) => {
+  removeProduct = async (slug) => {
     try {
-      const product = await getProductDb(id);
-      if (!product) {
-        throw new ErrorHandler(404, "product not found");
-      }
-      return await deleteProductDb(id);
+      const result = await deleteProductBySlugDb({ slug });
+      return result;
     } catch (error) {
-      throw new ErrorHandler(error.statusCode, error.message);
+      throw new ErrorHandler(500, error.message);
     }
   };
 }

@@ -71,6 +71,13 @@ const Nav = () => {
                     <p className="self-start">{userData?.fullname?.split(" ").join(" ")}</p>
                     <p className="self-start">@{userData?.username}</p>
                   </DropdownItem>
+                  {userData?.role === "admin" && (
+                    <DropdownItem tag="a">
+                      <Link className="w-full" to="/admin">
+                        Admin Dashboard
+                      </Link>
+                    </DropdownItem>
+                  )}
                   <DropdownItem tag="a">
                     <Link className="w-full" to="/profile">
                       Profile
