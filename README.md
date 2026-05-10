@@ -1,158 +1,239 @@
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/590f1314804d489eb8461fc4d294a363)](https://app.codacy.com/gh/dhatGuy/PERN-Store?utm_source=github.com&utm_medium=referral&utm_content=dhatGuy/PERN-Store&utm_campaign=Badge_Grade_Settings)
-[![Netlify Status](https://api.netlify.com/api/v1/badges/af46234b-6fba-43f2-808f-e2bbe4b2adf1/deploy-status)](https://app.netlify.com/sites/pern-store/deploys)
-[![wakatime](https://wakatime.com/badge/github/dhatGuy/PERN-Store.svg)](https://wakatime.com/badge/github/dhatGuy/PERN-Store)
+# Vantage
 
-# PERN STORE
+[![Tech Stack](https://img.shields.io/badge/Stack-PERN-blue.svg)](https://www.postgresql.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Security Audit](https://img.shields.io/badge/Security-Verified-success.svg)](security/vex/vex-analysis.md)
 
-A full-stack e-commerce project built with Postgres, Express, React and Node.
+Vantage is a high-performance, enterprise-grade e-commerce application built using the **PERN** (PostgreSQL, Express, React, Node.js) stack. Designed with a security-first mindset, Vantage features an isolated, containerized database, a secure reverse proxy configuration, and robust, verified payment gateway processing via Razorpay.
 
-## Swagger API Documentation
+## Technology Stack
 
-[Documentation](https://pern-store.onrender.com/api/docs/)
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend** | React 18, Vite, Tailwind CSS, Windmill UI, Axios |
+| **Backend** | Node.js, Express, JWT, Bcrypt, Joi/Zod |
+| **Database** | PostgreSQL 16 |
+| **Infrastructure** | Nginx, Docker, Docker Compose |
+| **Payments** | Razorpay SDK |
+| **Security** | CycloneDX (SBOM), VEX, Fail2Ban, UFW |
 
-## Screenshots
+---
 
-![Homepage Screen Shot](https://user-images.githubusercontent.com/51405947/104136952-a3509100-5399-11eb-94a6-0f9b07fbf1a2.png)
+## High-Level System Architecture
 
-## Database Schema
+Vantage employs a multi-tier deployment topology to ensure strict separation of concerns and maximum security. The system is orchestrated via Docker with a focus on network segmentation (the "Zone Model").
 
-[![ERD](https://user-images.githubusercontent.com/51405947/133893279-8872c475-85ff-47c4-8ade-7d9ef9e5325a.png)](https://dbdiagram.io/d/5fe320fa9a6c525a03bc19db)
+### 4-Layer Topology
 
-## Run Locally
+1.  **Presentation Layer (React & Vite)**:
+    *   Responsive UI bundled with Vite.
+    *   Styled using **Tailwind CSS** and **Windmill UI** for a premium, accessible user experience.
+2.  **Routing & Gateway Layer (Nginx)**:
+    *   Acts as a secure reverse proxy and API Gateway.
+    *   Terminates SSL/TLS, hides backend server headers, and routes traffic to eliminate CORS issues.
+3.  **Application Layer (Node.js & Express)**:
+    *   RESTful API handling business logic, authentication, and transactional flows.
+    *   Uses structured middleware for RBAC and input validation.
+4.  **Data Layer (PostgreSQL)**:
+    *   Isolated within a private Docker bridge network (`backend-net`).
+    *   Unreachable from the host loopback or the public internet, accessible only by the Application Layer.
 
-Clone the project
+### System Deployment Diagram
 
-```bash
-  git clone https://github.com/dhatguy/PERN-Store.git
+```mermaid
+graph TB
+    Internet((Public Internet)) 
+    
+    subgraph Docker_Host ["Docker Infrastructure Host"]
+        direction TB
+        
+        subgraph Frontend_Net ["Network: frontend-net (Bridge)"]
+            direction LR
+            Nginx_Cont["Container: Nginx Proxy"]
+            API_Cont["Container: Node.js API"]
+        end
+        
+        subgraph Backend_Net ["Network: backend-net (Isolated)"]
+            direction LR
+            DB_Cont[("Container: PostgreSQL")]
+        end
+    end
+    
+    Internet -->|HTTP/S: 80, 443| Nginx_Cont
+    Nginx_Cont -->|Proxy Traffic| API_Cont
+    API_Cont -->|Parameterized SQL| DB_Cont
+    
+    %% Styling
+    style Docker_Host fill:#f0f7ff,stroke:#0056b3,stroke-width:3px,stroke-dasharray: 5 5
+    style Frontend_Net fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    style Backend_Net fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
+    
+    style Internet fill:#eceff1,stroke:#37474f,stroke-width:2px
+    style Nginx_Cont fill:#01A982,color:#fff,stroke:#00695c,stroke-width:2px
+    style API_Cont fill:#121212,color:#fff,stroke:#000,stroke-width:2px
+    style DB_Cont fill:#0073e6,color:#fff,stroke:#0d47a1,stroke-width:2px
 ```
 
-Go to the project directory
+### Network Segmentation (Zone Model)
 
-```bash
-  cd PERN-Store
+| Zone | Service | Network | External Access |
+| :--- | :--- | :--- | :--- |
+| **Web Zone (DMZ)** | Nginx | `frontend-net` | Port 80/443 |
+| **App Zone** | API Server | `frontend-net`, `backend-net` | None (Internal Only) |
+| **Data Zone** | PostgreSQL | `backend-net` | None (Isolated) |
+
+---
+
+## Database Schema & Relational Dictionary
+
+The following catalog defines the relational structure and transactional integrity constraints of the Vantage platform.
+
+## Database Schema Relationship
+
+The following Entity Relationship (ER) diagram illustrates the relational structure and transactional integrity constraints of the Vantage platform.
+
+```mermaid
+erDiagram
+    users {
+        int user_id PK
+        string email UK
+        string username UK
+        string role
+    }
+    products {
+        int product_id PK
+        string slug UK
+        string name
+        float price
+    }
+    orders {
+        int order_id PK
+        int user_id FK
+        string status
+        float amount
+    }
+    order_item {
+        int id PK
+        int order_id FK
+        int product_id FK
+        int quantity
+    }
+    cart {
+        int id PK
+        int user_id FK
+    }
+    cart_item {
+        int id PK
+        int cart_id FK
+        int product_id FK
+        int quantity
+    }
+    reviews {
+        int user_id FK
+        int product_id FK
+        string content
+        int rating
+    }
+
+    users ||--o{ orders : "places"
+    users ||--o| cart : "owns"
+    users ||--o{ reviews : "writes"
+    orders ||--|{ order_item : "contains"
+    products ||--o{ order_item : "included_in"
+    products ||--o{ cart_item : "added_to"
+    products ||--o{ reviews : "rated_in"
+    cart ||--|{ cart_item : "holds"
 ```
 
-Install dependencies
+---
 
-```bash
-  npm install
+## Security & Hardening Architecture
+
+Vantage is built on a "Defense in Depth" philosophy, implementing multiple layers of security from the host level to the application code.
+
+### Host & Infrastructure Hardening
+*   **Firewall Isolation**: UFW (Uncomplicated Firewall) strictly configured to allow only essential traffic (SSH, HTTP, HTTPS).
+*   **Intrusion Prevention**: Fail2Ban monitoring system logs for brute-force attempts and automatically banning malicious IPs.
+*   **SSH Hardening**: Disabled root login, enforced key-based authentication, and custom port configuration.
+*   **Docker Security**: 
+    *   Containers run with `no-new-privileges:true`.
+    *   Read-only root filesystems where possible.
+    *   Dedicated bridge networks to prevent lateral movement.
+
+### Supply Chain Security
+*   **SBOM (Software Bill of Materials)**: Full CycloneDX SBOMs generated for all services, enabling transparent tracking of third-party dependencies.
+*   **VEX (Vulnerability Exploitability eXchange)**: Formal VEX analysis documents the exploitability of detected vulnerabilities, guiding the migration to hardened runtimes (e.g., `node:20-alpine`).
+
+### Application Security
+*   **Dual-Flow Authentication**: Secure password hashing via Bcrypt alongside Google OAuth 2.0 for frictionless sign-in.
+*   **RBAC (Role-Based Access Control)**: Strictly enforced string roles (`user` or `admin`) validated within JWT payloads.
+*   **Route Guards**: Backend-level authorization gates (`verifyToken`, `verifyAdmin`) that cannot be bypassed by client-side manipulation.
+*   **SQL Injection Prevention**: 100% usage of Parameterized SQL queries via the `pg` library.
+*   **Input Sanitization**: Joi/Zod-based schema validation to reject malformed payloads at the API threshold.
+
+---
+
+## Setup & Local Run Instructions
+
+### Prerequisites
+Before running Vantage, ensure your environment meets the following requirements:
+*   **Operating System**: Linux (Ubuntu 22.04+ recommended) or **Windows with WSL2**.
+*   **Containerization**: [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker Engine with Docker Compose installed.
+*   **Hardware**: Minimum 4GB RAM and 10GB free disk space.
+
+### Environment Configuration
+You must create `.env` files in both the `client` and `server` directories.
+
+#### Server (`server/.env`)
+```env
+PORT=9000
+DATABASE_URL=postgresql://user:pass@postgres:5432/vantage
+JWT_SECRET=your_long_secure_secret
+RAZORPAY_KEY_ID=your_key_id
+RAZORPAY_KEY_SECRET=your_key_secret
+OAUTH_CLIENT_ID=your_google_client_id
+OAUTH_CLIENT_SECRET=your_google_client_secret
 ```
 
-Go to server directory and install dependencies
-
-```bash
-  npm install
+#### Client (`client/.env`)
+```env
+VITE_API_URL=http://localhost/api
+VITE_GOOGLE_CLIENT_ID=your_google_client_id # Must match OAUTH_CLIENT_ID
+VITE_RAZORPAY_KEY_ID=your_key_id
 ```
 
-Go to client directory and install dependencies
-
+### Running with Docker
+To build and start the production environment:
 ```bash
-  npm install
+docker-compose -f docker-compose.prod.yml up --build
 ```
 
-Go to server directory and start the server
+---
 
-```bash
-  npm run dev
-```
+## Troubleshooting
 
-Go to client directory and start the client
+### Frontend cannot connect to Backend
+**Symptoms**: "Network Error" in browser console, products not loading, login fails.
+*   **Check VITE_API_URL**: Ensure `client/.env` has the correct `VITE_API_URL`. If running via Nginx, it should usually point to the domain or `/api`.
+*   **Check Container Status**: Run `docker ps` to ensure the `pern-prod-api` container is running.
+*   **Check Logs**: Run `docker logs pern-prod-api` to see if the server started correctly.
 
-```bash
-  npm run client
-```
+### Server cannot connect to Database
+**Symptoms**: Backend logs show `ECONNREFUSED` or `Authentication failed for user`.
+*   **Check Database URL**: Ensure the `DATABASE_URL` or connection parameters in `server/.env` match the credentials in the `postgres` service.
+*   **Internal Networking**: Within Docker, the host should be the service name (e.g., `postgres` or `pern-prod-db`), not `localhost`.
+*   **Wait for Initialization**: On first run, the database takes a few seconds to initialize from `init.sql`. Check logs with `docker logs pern-prod-db`.
 
-Start both client and server concurrently from the root directory
+### Google OAuth Flow Fails
+**Symptoms**: 500 Error on callback or "Invalid Client ID".
+*   **Client ID Match**: Ensure `VITE_GOOGLE_CLIENT_ID` (client) and `OAUTH_CLIENT_ID` (server) are identical.
+*   **Authorized Redirect URIs**: Ensure your Google Cloud Console has `http://localhost/api/auth/google/callback` (or your domain) added.
 
-```bash
-  npm run dev
-```
+---
 
-## Running with docker
+## Contributors
+Authored and maintained by **[@AravindKamath](https://github.com/AravindKamath)**.
 
-Make sure you have Docker installed
+---
 
-### Run the development environment
-
-```bash
-docker-compose -f docker-compose.dev.yml up
-```
-
-### Run the production environment
-
-```bash
-docker-compose up
-```
-
-Go to http://localhost:3000 to view the app running on your browser.
-
-## Deployment
-
-To deploy this project run
-
-```bash
-  npm run deploy
-```
-
-Check this article for [guidance](https://dev.to/stlnick/how-to-deploy-a-full-stack-mern-app-with-heroku-netlify-ncb)
-on how to deploy.
-
-## Tech
-
-- [React](https://reactjs.org/)
-- [Node](https://nodejs.org/en/)
-- [Express](http://expressjs.com/)
-- [Postgres](https://www.postgresql.org/)
-- [node-postgres](https://node-postgres.com/)
-- [Windmill React UI](https://windmillui.com/react-ui)
-- [Tailwind-CSS](https://tailwindcss.com/)
-- [react-hot-toast](https://react-hot-toast.com/docs)
-- [react-Spinners](https://www.npmjs.com/package/react-spinners)
-- [react-helmet-async](https://www.npmjs.com/package/react-helmet-async)
-
-## Environment Variables
-
-To run this project, you will need to add the following environment variables to your .env files in both client and server directory
-
-#### client/.env
-
-`VITE_GOOGLE_CLIENT_ID`
-
-`VITE_GOOGLE_CLIENT_SECRET`
-
-`VITE_API_URL`
-
-`VITE_STRIPE_PUB_KEY`
-
-### server/.env
-
-`POSTGRES_USER`
-
-`POSTGRES_HOST`
-
-`POSTGRES_PASSWORD`
-
-`POSTGRES_DATABASE`
-
-`POSTGRES_DATABASE_TEST`
-
-`POSTGRES_PORT`
-
-`PORT`
-
-`SECRET`
-
-`REFRESH_SECRET`
-
-`SMTP_FROM`
-
-`STRIPE_SECRET_KEY`
-
-## Contributing
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
+Vantage © 2026. High-Performance E-Commerce.
