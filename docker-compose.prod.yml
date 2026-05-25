@@ -84,8 +84,8 @@ services:
     expose:
       - "9000"
     networks:
-      - frontend-net   # Allows nginx → api communication
-      - backend-net    # Allows api → postgres communication
+      - frontend-net   #Allows nginx → api communication
+      - backend-net    #Allows api → postgres communication
     depends_on:
       postgres:
         condition: service_healthy
