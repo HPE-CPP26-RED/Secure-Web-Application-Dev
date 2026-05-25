@@ -29,14 +29,14 @@ class AuthService {
   }
 
   checkToken(token, email) {
-    return API.post("auth/check-token", {
+    return API.post("/auth/check-token", {
       token,
       email,
     });
   }
 
   resetPassword(token, email, password, password2) {
-    return API.post("auth/reset-password", {
+    return API.post("/auth/reset-password", {
       token,
       email,
       password,
@@ -44,8 +44,30 @@ class AuthService {
     });
   }
 
+  mfaSetup(email, password) {
+    return API.post("/auth/mfa/setup", {
+      email,
+      password,
+    }).then(({ data }) => data);
+  }
+
+  mfaVerify(email, password, code) {
+    return API.post("/auth/mfa/verify", {
+      email,
+      password,
+      code,
+    }).then(({ data }) => data);
+  }
+
+  loginMfa(mfaToken, code) {
+    return API.post("/auth/login/mfa", {
+      mfa_token: mfaToken,
+      code,
+    }).then(({ data }) => data);
+  }
+
   register(username, email, password) {
-    return API.post("auth/signup", {
+    return API.post("/auth/signup", {
       username,
       email,
       password,

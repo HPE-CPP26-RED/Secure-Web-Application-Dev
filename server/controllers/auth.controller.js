@@ -66,13 +66,23 @@ const createAccount = async (req, res) => {
 
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
-  const { token, refreshToken, user } = await authService.login(email, password);
+  const authResponse = await authService.login(email, password);
 
-  setAuthCookies(res, token, refreshToken);
+  if (authResponse.mfaRequired) {
+    logger.info({ event: "LOGIN_MFA_REQUIRED", userId: authResponse.user.user_id, ip: req.ip });
+    return res.status(200).json({
+      status: "mfa_required",
+      mfa_required: true,
+      mfa_token: authResponse.mfaToken,
+      user: authResponse.user,
+    });
+  }
 
-  logger.info({ event: "LOGIN_SUCCESS", userId: user.user_id, ip: req.ip });
+  setAuthCookies(res, authResponse.token, authResponse.refreshToken);
 
-  res.status(200).json({ status: "success", user });
+  logger.info({ event: "LOGIN_SUCCESS", userId: authResponse.user.user_id, ip: req.ip });
+
+  res.status(200).json({ status: "success", user: authResponse.user });
 };
 
 const googleLogin = async (req, res) => {
@@ -123,10 +133,15 @@ const logoutUser = async (req, res) => {
 };
 
 const forgotPassword = async (req, res) => {
-  const { email } = req.body;
-  // Always respond with 200 to avoid email enumeration
-  await authService.forgotPassword(email);
-  res.json({ status: "OK" });
+  try {
+    const { email } = req.body;
+    // Always respond with 200 to avoid email enumeration
+    await authService.forgotPassword(email);
+    res.json({ status: "OK" });
+  } catch (error) {
+    console.error("[Forgot Password Error]:", error);
+    res.status(500).json({ status: "error", message: "Internal Server Error" });
+  }
 };
 
 const verifyResetToken = async (req, res) => {
@@ -160,12 +175,64 @@ const refreshToken = async (req, res) => {
 };
 
 const resetPassword = async (req, res) => {
-  const { password, password2, token, email } = req.body;
-  await authService.resetPassword(password, password2, token, email);
-  res.json({
-    status: "OK",
-    message: "Password reset. Please log in with your new password.",
-  });
+  try {
+    const { password, password2, token, email } = req.body;
+    await authService.resetPassword(password, password2, token, email);
+    res.json({
+      status: "OK",
+      message: "Password reset. Please log in with your new password.",
+    });
+  } catch (error) {
+    console.error("[Reset Password Error]:", error);
+    res.status(500).json({ status: "error", message: "Internal Server Error" });
+  }
+};
+
+const setupMfa = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const { qrCodeDataUrl, otpauthUrl } = await authService.initMfaSetup(email, password);
+    res.status(200).json({ status: "success", qrCodeDataUrl, otpauthUrl });
+  } catch (error) {
+    logger.error({ event: "MFA_SETUP_ERROR", message: error.message, stack: error.stack });
+    res.status(error.statusCode || 500).json({
+      status: "error",
+      message: error.statusCode ? error.message : "Internal Server Error",
+    });
+  }
+};
+
+const verifyMfa = async (req, res) => {
+  try {
+    const { email, password, code } = req.body;
+    await authService.verifyMfaSetup(email, password, code);
+    res.status(200).json({ status: "success", message: "MFA enabled" });
+  } catch (error) {
+    logger.error({ event: "MFA_VERIFY_ERROR", message: error.message, stack: error.stack });
+    res.status(error.statusCode || 500).json({
+      status: "error",
+      message: error.statusCode ? error.message : "Internal Server Error",
+    });
+  }
+};
+
+const loginMfa = async (req, res) => {
+  try {
+    const { mfa_token, code } = req.body;
+    const { token, refreshToken, user } = await authService.loginMfa(mfa_token, code);
+
+    setAuthCookies(res, token, refreshToken);
+
+    logger.info({ event: "LOGIN_MFA_SUCCESS", userId: user.user_id, ip: req.ip });
+
+    res.status(200).json({ status: "success", user });
+  } catch (error) {
+    logger.error({ event: "LOGIN_MFA_ERROR", message: error.message, stack: error.stack });
+    res.status(error.statusCode || 500).json({
+      status: "error",
+      message: error.statusCode ? error.message : "Internal Server Error",
+    });
+  }
 };
 
 module.exports = {
@@ -177,4 +244,7 @@ module.exports = {
   verifyResetToken,
   resetPassword,
   refreshToken,
+  setupMfa,
+  verifyMfa,
+  loginMfa,
 };

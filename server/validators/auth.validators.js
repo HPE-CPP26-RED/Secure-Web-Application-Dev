@@ -17,6 +17,16 @@ const passwordRule = Joi.string()
     "any.required": "Password is required",
   });
 
+const mfaCodeRule = Joi.string()
+  .length(6)
+  .pattern(/^\d+$/)
+  .required()
+  .messages({
+    "string.length": "MFA code must be 6 digits",
+    "string.pattern.base": "MFA code must contain only digits",
+    "any.required": "MFA code is required",
+  });
+
 // ── Schemas ─────────────────────────────────────────────────────────────────
 
 const signupSchema = Joi.object({
@@ -73,6 +83,32 @@ const googleLoginSchema = Joi.object({
   code: Joi.string().required().messages({ "any.required": "Google auth code is required" }),
 });
 
+const mfaSetupSchema = Joi.object({
+  email: Joi.string().email({ tlds: { allow: false } }).required().messages({
+    "string.email": "A valid email address is required",
+    "any.required": "Email is required",
+  }),
+  password: Joi.string().min(1).required().messages({
+    "any.required": "Password is required",
+  }),
+});
+
+const mfaVerifySchema = Joi.object({
+  email: Joi.string().email({ tlds: { allow: false } }).required().messages({
+    "string.email": "A valid email address is required",
+    "any.required": "Email is required",
+  }),
+  password: Joi.string().min(1).required().messages({
+    "any.required": "Password is required",
+  }),
+  code: mfaCodeRule,
+});
+
+const mfaLoginSchema = Joi.object({
+  mfa_token: Joi.string().required().messages({ "any.required": "MFA token is required" }),
+  code: mfaCodeRule,
+});
+
 module.exports = {
   signupSchema,
   loginSchema,
@@ -80,4 +116,7 @@ module.exports = {
   checkTokenSchema,
   resetPasswordSchema,
   googleLoginSchema,
+  mfaSetupSchema,
+  mfaVerifySchema,
+  mfaLoginSchema,
 };

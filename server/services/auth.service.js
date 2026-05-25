@@ -11,6 +11,8 @@
  */
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const speakeasy = require("speakeasy");
+const qrcode = require("qrcode");
 const {
   setTokenStatusDb,
   createResetTokenDb,
@@ -30,6 +32,9 @@ const {
   getUserByUsernameDb,
   createUserDb,
   createUserGoogleDb,
+  getUserByIdDb,
+  setUserMfaSecretDb,
+  enableUserMfaDb,
 } = require("../db/user.db");
 const { createCartDb } = require("../db/cart.db");
 const mail = require("./mail.service");
@@ -38,6 +43,7 @@ const crypto = require("crypto");
 const moment = require("moment");
 const { logger } = require("../utils/logger");
 const { getPrivateKey, getPublicKey } = require("../utils/keyManager");
+const { encryptMfaSecret, decryptMfaSecret } = require("../utils/mfaCrypto");
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
@@ -52,6 +58,9 @@ const isBasicInputValid = (email, password) => {
   const validPassword = typeof password === "string" && password.trim().length >= 8;
   return validEmail && validPassword;
 };
+
+const hashResetToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
 
 // ── AuthService ─────────────────────────────────────────────────────────────
 
@@ -139,6 +148,22 @@ class AuthService {
     if (!isCorrectPassword) {
       logger.warn({ event: "LOGIN_FAILURE", reason: "Wrong password", userId: user_id });
       throw new ErrorHandler(401, "Email or password incorrect");
+    }
+
+    if (user.is_mfa_enabled) {
+      if (!user.mfa_secret_enc || !user.mfa_secret_iv || !user.mfa_secret_tag) {
+        logger.error({ event: "MFA_SECRET_MISSING", userId: user_id });
+        throw new ErrorHandler(500, "MFA is enabled but not configured");
+      }
+
+      const mfaToken = this.signMfaToken({ id: user_id, email: user.email });
+      logger.info({ event: "LOGIN_MFA_REQUIRED", userId: user_id });
+
+      return {
+        mfaRequired: true,
+        mfaToken,
+        user: { user_id, fullname, username, role },
+      };
     }
 
     const tokenPayload = { id: user_id, role, cart_id };
@@ -237,10 +262,12 @@ class AuthService {
     }
 
     await setTokenStatusDb(email);
-    const fpSalt = crypto.randomBytes(64).toString("base64");
-    const expireDate = moment().add(1, "h").format();
-    await createResetTokenDb({ email, expireDate, fpSalt });
-    await mail.forgotPasswordMail(fpSalt, email);
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = hashResetToken(resetToken);
+    const expireDate = moment().add(60, "minutes").format();
+
+    await createResetTokenDb({ email, expireDate, fpSalt: resetToken, tokenHash });
+    await mail.forgotPasswordMail(resetToken, email);
 
     logger.info({ event: "FORGOT_PASSWORD_SENT", email });
   }
@@ -250,7 +277,8 @@ class AuthService {
   async verifyResetToken(token, email) {
     const curDate = moment().format();
     await deleteResetTokenDb(curDate);
-    return await isValidTokenDb({ token, email, curDate });
+    const tokenHash = hashResetToken(token);
+    return await isValidTokenDb({ tokenHash, token, email, curDate });
   }
 
   // ── Reset Password ─────────────────────────────────────────────────────────
@@ -262,7 +290,8 @@ class AuthService {
     }
 
     const curDate = moment().format();
-    const isTokenValid = await isValidTokenDb({ token, email, curDate });
+    const tokenHash = hashResetToken(token);
+    const isTokenValid = await isValidTokenDb({ tokenHash, token, email, curDate });
 
     if (!isTokenValid) {
       logger.warn({ event: "RESET_PASSWORD_FAILURE", reason: "Invalid or expired token", email });
@@ -320,6 +349,192 @@ class AuthService {
       expiresIn: "7d",
     });
     return { rawToken, expiresAt };
+  }
+
+  /**
+   * Sign a short-lived MFA challenge token (5 minutes).
+   * @param {object} data — { id, email }
+   * @returns {string} signed JWT
+   */
+  signMfaToken(data) {
+    return jwt.sign({ ...data, type: "mfa" }, getPrivateKey(), {
+      algorithm: "RS256",
+      expiresIn: "5m",
+    });
+  }
+
+  // ── MFA Setup ───────────────────────────────────────────────────────────
+
+  async initMfaSetup(email, password) {
+    if (!isBasicInputValid(email, password)) {
+      logger.warn({ event: "MFA_SETUP_FAILURE", reason: "Invalid input", email });
+      throw new ErrorHandler(401, "Invalid credentials");
+    }
+
+    const user = await getUserByEmailDb(email);
+    if (!user) {
+      await bcrypt.hash(password, BCRYPT_ROUNDS);
+      logger.warn({ event: "MFA_SETUP_FAILURE", reason: "Email not found", email });
+      throw new ErrorHandler(401, "Email or password incorrect");
+    }
+
+    if (user.google_id && !user.password) {
+      logger.warn({ event: "MFA_SETUP_FAILURE", reason: "Google-only account", email });
+      throw new ErrorHandler(403, "Please log in with Google");
+    }
+
+    if (user.is_mfa_enabled) {
+      logger.warn({ event: "MFA_SETUP_FAILURE", reason: "Already enabled", userId: user.user_id });
+      throw new ErrorHandler(400, "MFA is already enabled for this account");
+    }
+
+    const isCorrectPassword = await bcrypt.compare(password, user.password);
+    if (!isCorrectPassword) {
+      logger.warn({ event: "MFA_SETUP_FAILURE", reason: "Wrong password", userId: user.user_id });
+      throw new ErrorHandler(401, "Email or password incorrect");
+    }
+
+    const secret = speakeasy.generateSecret({
+      name: `Vantage (${email})`,
+      issuer: "Vantage",
+    });
+
+    const { secretEnc, secretIv, secretTag } = encryptMfaSecret(secret.base32);
+    await setUserMfaSecretDb({ userId: user.user_id, secretEnc, secretIv, secretTag });
+
+    const qrCodeDataUrl = await qrcode.toDataURL(secret.otpauth_url);
+
+    logger.info({ event: "MFA_SETUP_ISSUED", userId: user.user_id });
+
+    return { qrCodeDataUrl, otpauthUrl: secret.otpauth_url };
+  }
+
+  async verifyMfaSetup(email, password, code) {
+    if (!isBasicInputValid(email, password)) {
+      logger.warn({ event: "MFA_VERIFY_FAILURE", reason: "Invalid input", email });
+      throw new ErrorHandler(401, "Invalid credentials");
+    }
+
+    const user = await getUserByEmailDb(email);
+    if (!user) {
+      await bcrypt.hash(password, BCRYPT_ROUNDS);
+      logger.warn({ event: "MFA_VERIFY_FAILURE", reason: "Email not found", email });
+      throw new ErrorHandler(401, "Email or password incorrect");
+    }
+
+    if (user.google_id && !user.password) {
+      logger.warn({ event: "MFA_VERIFY_FAILURE", reason: "Google-only account", email });
+      throw new ErrorHandler(403, "Please log in with Google");
+    }
+
+    if (user.is_mfa_enabled) {
+      logger.warn({ event: "MFA_VERIFY_FAILURE", reason: "Already enabled", userId: user.user_id });
+      throw new ErrorHandler(400, "MFA is already enabled for this account");
+    }
+
+    const isCorrectPassword = await bcrypt.compare(password, user.password);
+    if (!isCorrectPassword) {
+      logger.warn({ event: "MFA_VERIFY_FAILURE", reason: "Wrong password", userId: user.user_id });
+      throw new ErrorHandler(401, "Email or password incorrect");
+    }
+
+    if (!user.mfa_secret_enc || !user.mfa_secret_iv || !user.mfa_secret_tag) {
+      logger.warn({ event: "MFA_VERIFY_FAILURE", reason: "Missing secret", userId: user.user_id });
+      throw new ErrorHandler(400, "MFA setup has not been initiated");
+    }
+
+    const secret = decryptMfaSecret({
+      secretEnc: user.mfa_secret_enc,
+      secretIv: user.mfa_secret_iv,
+      secretTag: user.mfa_secret_tag,
+    });
+
+    const isValid = speakeasy.totp.verify({
+      secret,
+      encoding: "base32",
+      token: code,
+      window: 1,
+    });
+
+    if (!isValid) {
+      logger.warn({ event: "MFA_VERIFY_FAILURE", reason: "Invalid code", userId: user.user_id });
+      throw new ErrorHandler(400, "Invalid MFA code");
+    }
+
+    await enableUserMfaDb(user.user_id);
+    logger.info({ event: "MFA_ENABLED", userId: user.user_id });
+
+    return true;
+  }
+
+  // ── MFA Login Challenge ─────────────────────────────────────────────────
+
+  async loginMfa(mfaToken, code) {
+    let payload;
+    try {
+      payload = jwt.verify(mfaToken, getPublicKey(), { algorithms: ["RS256"] });
+    } catch (err) {
+      logger.warn({ event: "MFA_LOGIN_FAILURE", reason: "Invalid token", err: err.message });
+      throw new ErrorHandler(401, "Invalid or expired MFA token");
+    }
+
+    if (payload.type !== "mfa") {
+      logger.warn({ event: "MFA_LOGIN_FAILURE", reason: "Wrong token type" });
+      throw new ErrorHandler(401, "Invalid MFA token");
+    }
+
+    const user = await getUserByIdDb(payload.id);
+    if (!user) {
+      logger.warn({ event: "MFA_LOGIN_FAILURE", reason: "User not found", userId: payload.id });
+      throw new ErrorHandler(401, "Invalid MFA token");
+    }
+
+    if (!user.is_mfa_enabled) {
+      logger.warn({ event: "MFA_LOGIN_FAILURE", reason: "MFA not enabled", userId: user.user_id });
+      throw new ErrorHandler(400, "MFA is not enabled for this account");
+    }
+
+    if (!user.mfa_secret_enc || !user.mfa_secret_iv || !user.mfa_secret_tag) {
+      logger.error({ event: "MFA_SECRET_MISSING", userId: user.user_id });
+      throw new ErrorHandler(500, "MFA is enabled but not configured");
+    }
+
+    const secret = decryptMfaSecret({
+      secretEnc: user.mfa_secret_enc,
+      secretIv: user.mfa_secret_iv,
+      secretTag: user.mfa_secret_tag,
+    });
+
+    const isValid = speakeasy.totp.verify({
+      secret,
+      encoding: "base32",
+      token: code,
+      window: 1,
+    });
+
+    if (!isValid) {
+      logger.warn({ event: "MFA_LOGIN_FAILURE", reason: "Invalid code", userId: user.user_id });
+      throw new ErrorHandler(401, "Invalid MFA code");
+    }
+
+    const tokenPayload = { id: user.user_id, role: user.role, cart_id: user.cart_id };
+    const token = this.signAccessToken(tokenPayload);
+    const { rawToken: refreshToken, expiresAt } = this.signRefreshTokenRaw(tokenPayload);
+
+    await storeRefreshTokenDb({ userId: user.user_id, rawToken: refreshToken, expiresAt });
+
+    logger.info({ event: "MFA_LOGIN_SUCCESS", userId: user.user_id });
+
+    return {
+      token,
+      refreshToken,
+      user: {
+        user_id: user.user_id,
+        fullname: user.fullname,
+        username: user.username,
+        role: user.role,
+      },
+    };
   }
 }
 

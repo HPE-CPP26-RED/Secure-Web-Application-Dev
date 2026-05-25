@@ -20,8 +20,8 @@ const createTransporter = async () => {
     const accessToken = await new Promise((resolve, reject) => {
       oauth2Client.getAccessToken((err, token) => {
         if (err) {
-          logger.error(err);
-          reject();
+          logger.error({ event: "MAILER_OAUTH_ERROR", message: err.message, stack: err.stack });
+          return reject(err);
         }
         resolve(token);
       });
@@ -40,14 +40,16 @@ const createTransporter = async () => {
     });
     return transporter;
   } catch (err) {
-    return err;
+    logger.error({ event: "MAILER_TRANSPORT_ERROR", message: err.message, stack: err.stack });
+    throw err;
   }
 };
 
 const url =
-  process.env.NODE_ENV === "production"
+  process.env.CLIENT_URL ||
+  (process.env.NODE_ENV === "production"
     ? "https://pern-store.netlify.app"
-    : "http://localhost:3000";
+    : "http://localhost:3000");
 
 const signupMail = async (to, name) => {
   try {
@@ -82,7 +84,7 @@ const forgotPasswordMail = async (token, email) => {
           <a 
             href="${url}/reset-password?token=${encodeURIComponent(
         token
-      )}&email=${email}"
+      )}&email=${encodeURIComponent(email)}"
           >
           <br/>
           Reset Password

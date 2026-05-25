@@ -81,6 +81,25 @@ const changeUserPasswordDb = async (hashedPassword, email) => {
   ]);
 };
 
+const setUserMfaSecretDb = async ({ userId, secretEnc, secretIv, secretTag }) => {
+  const { rows } = await pool.query(
+    `UPDATE users
+      SET mfa_secret_enc = $1, mfa_secret_iv = $2, mfa_secret_tag = $3, is_mfa_enabled = $4
+      WHERE user_id = $5
+      RETURNING user_id, email, is_mfa_enabled`,
+    [secretEnc, secretIv, secretTag, false, userId]
+  );
+  return rows[0];
+};
+
+const enableUserMfaDb = async (userId) => {
+  const { rows } = await pool.query(
+    `UPDATE users SET is_mfa_enabled = $1 WHERE user_id = $2 RETURNING user_id, is_mfa_enabled`,
+    [true, userId]
+  );
+  return rows[0];
+};
+
 module.exports = {
   getAllUsersDb,
   getUserByIdDb,
@@ -91,4 +110,6 @@ module.exports = {
   deleteUserDb,
   getUserByUsernameDb,
   changeUserPasswordDb,
+  setUserMfaSecretDb,
+  enableUserMfaDb,
 };

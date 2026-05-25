@@ -8,9 +8,10 @@ import PulseLoader from "react-spinners/PulseLoader";
 import authService from "services/auth.service";
 
 const ResetPassword = () => {
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState(null);
   const [resetMsg, setResetMsg] = useState("");
   const [isResetting, setIsResetting] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
@@ -25,20 +26,45 @@ const ResetPassword = () => {
   password.current = watch("password", "");
 
   useEffect(() => {
+    const hasToken = typeof token === "string" && token.trim().length > 0;
+    const hasEmail = typeof email === "string" && email.trim().length > 0;
+
+    if (!hasToken || !hasEmail) {
+      setMsg({
+        showForm: false,
+        message: "Reset link is missing required information. Please request a new one.",
+      });
+      setIsChecking(false);
+      return;
+    }
+
     authService
       .checkToken(token, email)
       .then(({ data }) => setMsg(data))
-      .catch((e) => console.error(e.response));
+      .catch((e) => {
+        setMsg({
+          showForm: false,
+          message: e?.response?.data?.message || "Token validation failed.",
+        });
+      })
+      .finally(() => setIsChecking(false));
   }, [token, email]);
 
   const handlePasswordReset = (data) => {
+    const hasToken = typeof token === "string" && token.trim().length > 0;
+    const hasEmail = typeof email === "string" && email.trim().length > 0;
+    if (!hasToken || !hasEmail) {
+      setResetMsg("Reset link is missing required information. Please request a new one.");
+      return;
+    }
+
     setIsResetting(true);
     authService
       .resetPassword(token, email, data.password, data.password2)
       .then(({ data }) => {
         if (data.status === "error") {
           setIsResetting(false);
-          setResetMsg(data);
+          setResetMsg(data.message || "Password reset failed.");
           return;
         }
         toast.success(data.message);
@@ -48,11 +74,18 @@ const ResetPassword = () => {
       })
       .catch((err) => {
         setIsResetting(false);
+        setResetMsg(err?.response?.data?.message || "Password reset failed.");
       });
   };
   return (
     <Layout title="Reset Password">
-      {msg.showForm ? (
+      {isChecking ? (
+        <div className="pt-12">
+          <div className="mx-auto max-w-lg shadow-2xl p-8 md:p-10 text-center">
+            <p>Validating reset link...</p>
+          </div>
+        </div>
+      ) : msg?.showForm ? (
         <div className="pt-12">
           <header className="max-w-lg mx-auto mb-4">
             <h1 className="text-4xl font-bold text-center">Reset Password</h1>
@@ -69,14 +102,19 @@ const ResetPassword = () => {
                   {...register("password", {
                     required: "Password cannot be empty",
                     minLength: {
-                      value: 6,
-                      message: "Password must be greater than 5 characters",
+                      value: 8,
+                      message: "Password must be at least 8 characters",
+                    },
+                    pattern: {
+                      value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?])/, 
+                      message:
+                        "Password must include uppercase, lowercase, number, and special character",
                     },
                   })}
                 />
                 {resetMsg && (
                   <HelperText className="pt-2" valid={false}>
-                    {resetMsg.message || ""}
+                    {resetMsg}
                   </HelperText>
                 )}
               </Label>
@@ -94,12 +132,17 @@ const ResetPassword = () => {
               </Label>
               {errors.password && (
                 <HelperText className="pt-2" valid={false}>
-                  {resetMsg.message}
+                  {errors.password.message}
+                </HelperText>
+              )}
+              {errors.password2 && (
+                <HelperText className="pt-2" valid={false}>
+                  {errors.password2.message}
                 </HelperText>
               )}
               {resetMsg && (
                 <HelperText className="pt-2" valid={false}>
-                  {resetMsg.message || ""}
+                  {resetMsg}
                 </HelperText>
               )}
               <Button type="submit" disabled={isResetting}>
@@ -109,7 +152,11 @@ const ResetPassword = () => {
           </div>
         </div>
       ) : (
-        <div>{msg.message}</div>
+        <div className="pt-12">
+          <div className="mx-auto max-w-lg shadow-2xl p-8 md:p-10 text-center">
+            <p>{msg?.message || "Reset link is invalid or expired."}</p>
+          </div>
+        </div>
       )}
     </Layout>
   );

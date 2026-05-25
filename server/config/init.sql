@@ -59,6 +59,7 @@ CREATE TABLE public."resetTokens"
     id SERIAL NOT NULL,
     email character varying NOT NULL,
     token character varying NOT NULL,
+    token_hash text,
     used boolean DEFAULT false NOT NULL,
     expiration timestamp without time zone,
     PRIMARY KEY (id)
@@ -95,6 +96,10 @@ CREATE TABLE public.users
     username character varying(50) UNIQUE NOT NULL,
     google_id character varying(100) UNIQUE,
     role character varying(10) DEFAULT 'user'::character varying NOT NULL,
+    is_mfa_enabled boolean DEFAULT false NOT NULL,
+    mfa_secret_enc text,
+    mfa_secret_iv text,
+    mfa_secret_tag text,
     address character varying(200),
     city character varying(100),
     state character varying(100),
@@ -169,6 +174,9 @@ CREATE UNIQUE INDEX users_unique_lower_email_idx
 
 CREATE UNIQUE INDEX users_unique_lower_username_idx
     ON public.users (lower(username));
+
+CREATE INDEX reset_tokens_email_token_hash_idx
+    ON public."resetTokens" (email, token_hash);
 
     -- Seed data for products table 
 INSERT INTO public.products (product_id, name, slug, price, description, image_url) VALUES (1, 'Swiss Cheese', 'swiss-cheese', 956.97, 'Swiss cheese is a mild cow''s milk cheese with a firmer texture than baby Swiss. The flavor is light, sweet, and nutty. Swiss cheese is distinguished by its luster, pale yellow color, and large holes (called eyes) caused by carbon dioxide released during the maturation process.', 'https://i.ibb.co/N16wJ48/swiss-cheese.png');
