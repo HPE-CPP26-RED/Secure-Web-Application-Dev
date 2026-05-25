@@ -151,6 +151,21 @@ services:
       - "-c"
       - "log_statement=ddl"
 
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DATA ZONE — Adminer (Local DB GUI)
+  # ═══════════════════════════════════════════════════════════════════════════
+  adminer:
+    image: adminer:latest
+    container_name: pern-adminer
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - backend-net
+      - adminer-net
+
 # ═════════════════════════════════════════════════════════════════════════════
 # NETWORK SEGMENTATION — Two Isolated Bridge Networks
 # ═════════════════════════════════════════════════════════════════════════════
@@ -168,6 +183,13 @@ networks:
     driver_opts:
       com.docker.network.bridge.name: br-backend
     internal: true    # No external access — fully isolated
+
+  # adminer-net: host ↔ adminer ONLY
+  adminer-net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-adminer
+    internal: false
 
 # ═════════════════════════════════════════════════════════════════════════════
 # PERSISTENT VOLUMES

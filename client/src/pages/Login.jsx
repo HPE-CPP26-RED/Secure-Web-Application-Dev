@@ -1,14 +1,9 @@
 import { useGoogleLogin } from "@react-oauth/google";
 import {
-  Backdrop,
   Button,
   HelperText,
   Input,
   Label,
-  Modal,
-  ModalBody,
-  ModalFooter,
-  ModalHeader,
 } from "@windmill/react-ui";
 import ForgotPasswordModal from "components/ForgotPasswordModal";
 import { useUser } from "context/UserContext";
@@ -31,16 +26,6 @@ const Login = () => {
   const [mfaCode, setMfaCode] = useState("");
   const [mfaError, setMfaError] = useState("");
   const [isMfaSubmitting, setIsMfaSubmitting] = useState(false);
-  const [isMfaSetupOpen, setIsMfaSetupOpen] = useState(false);
-  const [mfaSetupEmail, setMfaSetupEmail] = useState("");
-  const [mfaSetupPassword, setMfaSetupPassword] = useState("");
-  const [mfaSetupError, setMfaSetupError] = useState("");
-  const [mfaSetupLoading, setMfaSetupLoading] = useState(false);
-  const [mfaQrCode, setMfaQrCode] = useState("");
-  const [mfaOtpAuthUrl, setMfaOtpAuthUrl] = useState("");
-  const [mfaVerifyCode, setMfaVerifyCode] = useState("");
-  const [mfaVerifyError, setMfaVerifyError] = useState("");
-  const [mfaVerifyLoading, setMfaVerifyLoading] = useState(false);
   const { state } = useLocation();
 
   const login = useGoogleLogin({
@@ -136,65 +121,6 @@ const Login = () => {
     setMfaToken("");
     setMfaCode("");
     setMfaError("");
-  };
-
-  const openMfaSetup = () => {
-    setIsMfaSetupOpen(true);
-    setMfaSetupError("");
-    setMfaVerifyError("");
-    setMfaQrCode("");
-    setMfaOtpAuthUrl("");
-    setMfaVerifyCode("");
-  };
-
-  const closeMfaSetup = () => {
-    setIsMfaSetupOpen(false);
-    setMfaSetupError("");
-    setMfaVerifyError("");
-    setMfaSetupLoading(false);
-    setMfaVerifyLoading(false);
-  };
-
-  const handleMfaSetup = async (event) => {
-    event.preventDefault();
-    if (!mfaSetupEmail || !mfaSetupPassword) {
-      setMfaSetupError("Email and password are required");
-      return;
-    }
-
-    try {
-      setMfaSetupError("");
-      setMfaSetupLoading(true);
-      const data = await authService.mfaSetup(mfaSetupEmail, mfaSetupPassword);
-      setMfaQrCode(data.qrCodeDataUrl || "");
-      setMfaOtpAuthUrl(data.otpauthUrl || "");
-    } catch (error) {
-      const res = error.response;
-      setMfaSetupError(res?.data?.message || "Unable to start MFA setup");
-    } finally {
-      setMfaSetupLoading(false);
-    }
-  };
-
-  const handleMfaVerify = async (event) => {
-    event.preventDefault();
-    if (!mfaVerifyCode) {
-      setMfaVerifyError("MFA code is required");
-      return;
-    }
-
-    try {
-      setMfaVerifyError("");
-      setMfaVerifyLoading(true);
-      await authService.mfaVerify(mfaSetupEmail, mfaSetupPassword, mfaVerifyCode);
-      toast.success("MFA enabled. Please log in again.");
-      closeMfaSetup();
-    } catch (error) {
-      const res = error.response;
-      setMfaVerifyError(res?.data?.message || "Unable to verify MFA code");
-    } finally {
-      setMfaVerifyLoading(false);
-    }
   };
 
   if (redirectToReferrer) {
@@ -295,9 +221,6 @@ const Login = () => {
               )}
               <div className="mt-4 flex items-center justify-between">
                 <ForgotPasswordModal />
-                <Button layout="link" type="button" onClick={openMfaSetup}>
-                  Enable MFA
-                </Button>
               </div>
               <Button type="submit" disabled={isLoading || isGoogleLoading}>
                 {isLoading ? <PulseLoader color={"#01A982"} size={10} loading /> : "Login"}
@@ -343,87 +266,6 @@ const Login = () => {
           )}
         </form>
       </div>
-      {isMfaSetupOpen && <Backdrop />}
-      <Modal isOpen={isMfaSetupOpen} onClose={closeMfaSetup}>
-        <ModalHeader>Enable MFA</ModalHeader>
-        <ModalBody>
-          {!mfaQrCode ? (
-            <form onSubmit={handleMfaSetup}>
-              <Label>
-                <span className="font-semibold">Email</span>
-                <Input
-                  className="mt-1 border py-2 pl-2"
-                  type="email"
-                  inputMode="email"
-                  value={mfaSetupEmail}
-                  onChange={(event) => setMfaSetupEmail(event.target.value)}
-                />
-              </Label>
-              <Label className="mt-4">
-                <span className="font-semibold">Password</span>
-                <Input
-                  className="mt-1 border py-2 pl-2"
-                  type="password"
-                  value={mfaSetupPassword}
-                  onChange={(event) => setMfaSetupPassword(event.target.value)}
-                />
-              </Label>
-              {mfaSetupError && (
-                <HelperText className="mt-2" valid={false}>
-                  {mfaSetupError}
-                </HelperText>
-              )}
-              <ModalFooter>
-                <Button type="submit" disabled={mfaSetupLoading}>
-                  {mfaSetupLoading ? (
-                    <PulseLoader size={10} color={"#01A982"} />
-                  ) : (
-                    "Generate QR"
-                  )}
-                </Button>
-              </ModalFooter>
-            </form>
-          ) : (
-            <form onSubmit={handleMfaVerify}>
-              <div className="flex flex-col items-center">
-                <img
-                  src={mfaQrCode}
-                  alt="MFA QR code"
-                  className="h-40 w-40"
-                />
-                {mfaOtpAuthUrl && (
-                  <p className="text-xs mt-2 break-all text-center">{mfaOtpAuthUrl}</p>
-                )}
-              </div>
-              <Label className="mt-4">
-                <span className="font-semibold">MFA Code</span>
-                <Input
-                  className="mt-1 border py-2 pl-2"
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={mfaVerifyCode}
-                  onChange={(event) => setMfaVerifyCode(event.target.value)}
-                />
-              </Label>
-              {mfaVerifyError && (
-                <HelperText className="mt-2" valid={false}>
-                  {mfaVerifyError}
-                </HelperText>
-              )}
-              <ModalFooter>
-                <Button type="submit" disabled={mfaVerifyLoading}>
-                  {mfaVerifyLoading ? (
-                    <PulseLoader size={10} color={"#01A982"} />
-                  ) : (
-                    "Verify and Enable"
-                  )}
-                </Button>
-              </ModalFooter>
-            </form>
-          )}
-        </ModalBody>
-      </Modal>
     </Layout>
   );
 };

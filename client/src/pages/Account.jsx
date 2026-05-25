@@ -1,4 +1,14 @@
-import { Button } from "@windmill/react-ui";
+import {
+  Backdrop,
+  Button,
+  HelperText,
+  Input,
+  Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+} from "@windmill/react-ui";
 import AccountForm from "components/AccountForm";
 import { useUser } from "context/UserContext";
 import Layout from "layout/Layout";
@@ -12,6 +22,15 @@ const Account = () => {
   const { userData } = useUser();
   const [showSettings, setShowSettings] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isMfaSetupOpen, setIsMfaSetupOpen] = useState(false);
+  const [mfaSetupPassword, setMfaSetupPassword] = useState("");
+  const [mfaSetupError, setMfaSetupError] = useState("");
+  const [mfaSetupLoading, setMfaSetupLoading] = useState(false);
+  const [mfaQrCode, setMfaQrCode] = useState("");
+  const [mfaOtpAuthUrl, setMfaOtpAuthUrl] = useState("");
+  const [mfaVerifyCode, setMfaVerifyCode] = useState("");
+  const [mfaVerifyError, setMfaVerifyError] = useState("");
+  const [mfaVerifyLoading, setMfaVerifyLoading] = useState(false);
 
   const resetPassword = () => {
     setIsSending(true);
@@ -27,6 +46,77 @@ const Account = () => {
         setIsSending(false);
         toast.error("An error occured. Please try again.");
       });
+  };
+
+  const openMfaSetup = () => {
+    setIsMfaSetupOpen(true);
+    setMfaSetupError("");
+    setMfaVerifyError("");
+    setMfaQrCode("");
+    setMfaOtpAuthUrl("");
+    setMfaVerifyCode("");
+    setMfaSetupPassword("");
+  };
+
+  const closeMfaSetup = () => {
+    setIsMfaSetupOpen(false);
+    setMfaSetupError("");
+    setMfaVerifyError("");
+    setMfaSetupLoading(false);
+    setMfaVerifyLoading(false);
+    setMfaSetupPassword("");
+  };
+
+  const handleMfaSetup = async (event) => {
+    event.preventDefault();
+    if (!userData?.email) {
+      setMfaSetupError("Unable to load your email. Please refresh.");
+      return;
+    }
+
+    if (!mfaSetupPassword) {
+      setMfaSetupError("Password is required");
+      return;
+    }
+
+    try {
+      setMfaSetupError("");
+      setMfaSetupLoading(true);
+      const data = await authService.mfaSetup(userData.email, mfaSetupPassword);
+      setMfaQrCode(data.qrCodeDataUrl || "");
+      setMfaOtpAuthUrl(data.otpauthUrl || "");
+    } catch (error) {
+      const res = error.response;
+      setMfaSetupError(res?.data?.message || "Unable to start MFA setup");
+    } finally {
+      setMfaSetupLoading(false);
+    }
+  };
+
+  const handleMfaVerify = async (event) => {
+    event.preventDefault();
+    if (!userData?.email) {
+      setMfaVerifyError("Unable to load your email. Please refresh.");
+      return;
+    }
+
+    if (!mfaVerifyCode) {
+      setMfaVerifyError("MFA code is required");
+      return;
+    }
+
+    try {
+      setMfaVerifyError("");
+      setMfaVerifyLoading(true);
+      await authService.mfaVerify(userData.email, mfaSetupPassword, mfaVerifyCode);
+      toast.success("MFA enabled. Please log in again.");
+      closeMfaSetup();
+    } catch (error) {
+      const res = error.response;
+      setMfaVerifyError(res?.data?.message || "Unable to verify MFA code");
+    } finally {
+      setMfaVerifyLoading(false);
+    }
   };
 
   return (
@@ -72,6 +162,14 @@ const Account = () => {
                     </Button>
                   </dd>
                 </div>
+                <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                  <dt className="text-sm font-medium text-gray-500">Multi-factor authentication</dt>
+                  <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                    <Button disabled={!userData?.email} onClick={openMfaSetup}>
+                      Enable MFA
+                    </Button>
+                  </dd>
+                </div>
                 <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                   <dt className="text-sm font-medium text-gray-500">Address</dt>
                   <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
@@ -107,6 +205,77 @@ const Account = () => {
           </div>
         </div>
       )}
+      {isMfaSetupOpen && <Backdrop />}
+      <Modal isOpen={isMfaSetupOpen} onClose={closeMfaSetup}>
+        <ModalHeader>Enable MFA</ModalHeader>
+        <ModalBody>
+          {!mfaQrCode ? (
+            <form onSubmit={handleMfaSetup}>
+              <Label>
+                <span className="font-semibold">Password</span>
+                <Input
+                  className="mt-1 border py-2 pl-2"
+                  type="password"
+                  value={mfaSetupPassword}
+                  onChange={(event) => setMfaSetupPassword(event.target.value)}
+                />
+              </Label>
+              {mfaSetupError && (
+                <HelperText className="mt-2" valid={false}>
+                  {mfaSetupError}
+                </HelperText>
+              )}
+              <ModalFooter>
+                <Button type="submit" disabled={mfaSetupLoading}>
+                  {mfaSetupLoading ? (
+                    <PulseLoader size={10} color={"#01A982"} />
+                  ) : (
+                    "Generate QR"
+                  )}
+                </Button>
+              </ModalFooter>
+            </form>
+          ) : (
+            <form onSubmit={handleMfaVerify}>
+              <div className="flex flex-col items-center">
+                <img
+                  src={mfaQrCode}
+                  alt="MFA QR code"
+                  className="h-40 w-40"
+                />
+                {mfaOtpAuthUrl && (
+                  <p className="text-xs mt-2 break-all text-center">{mfaOtpAuthUrl}</p>
+                )}
+              </div>
+              <Label className="mt-4">
+                <span className="font-semibold">MFA Code</span>
+                <Input
+                  className="mt-1 border py-2 pl-2"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={mfaVerifyCode}
+                  onChange={(event) => setMfaVerifyCode(event.target.value)}
+                />
+              </Label>
+              {mfaVerifyError && (
+                <HelperText className="mt-2" valid={false}>
+                  {mfaVerifyError}
+                </HelperText>
+              )}
+              <ModalFooter>
+                <Button type="submit" disabled={mfaVerifyLoading}>
+                  {mfaVerifyLoading ? (
+                    <PulseLoader size={10} color={"#01A982"} />
+                  ) : (
+                    "Verify and Enable"
+                  )}
+                </Button>
+              </ModalFooter>
+            </form>
+          )}
+        </ModalBody>
+      </Modal>
     </Layout>
   );
 };
