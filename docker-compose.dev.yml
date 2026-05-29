@@ -1,3 +1,5 @@
+# //this file is only for local testing for deployement use te other one
+
 ###############################################################################
 # docker-compose.prod.yml — Production Orchestration (PERN-Store)
 #
@@ -137,13 +139,14 @@ services:
     restart: unless-stopped
     env_file:
       - ./server/.env
-    # NO port mappings — only accessible from api on backend-net
-    # PostgreSQL binds to the internal Docker network interface only
-    expose:
-      - "5432"
+    # For local testing, expose PostgreSQL to host
+    # In production, remove 'ports' and keep only 'expose'
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./server/config/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./server/config/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./server/config/init-test.sh:/docker-entrypoint-initdb.d/02-init-test.sh:ro
     networks:
       - backend-net
     # postgres MUST NOT be on frontend-net — enforces App→Data isolation
