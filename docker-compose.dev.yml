@@ -1,3 +1,5 @@
+# //this file is only for local testing for deployement use te other one
+
 ###############################################################################
 # docker-compose.prod.yml — Production Orchestration (PERN-Store)
 #
@@ -31,9 +33,9 @@ services:
     container_name: pern-prod-nginx
     restart: unless-stopped
     ports:
-      # ONLY externally accessible service
-      - "80:80"
-      - "443:443"
+      # TESTING: Accept connections from remote machines
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
     volumes:
       # Hardened Nginx configuration
       - ./server/config/nginx.conf:/etc/nginx/nginx.conf:ro
@@ -84,7 +86,7 @@ services:
     env_file:
       - ./server/.env
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=9000
       - POSTGRES_USER=postgres
       - POSTGRES_DB=pernstore
@@ -100,8 +102,9 @@ services:
       - SMTP_FROM="Vantage Support <kamatharavind28@gmail.com>"
       - SMTP_USER=kamatharavind28@gmail.com
       - LOG_LEVEL=info
-    # NO port mappings — only accessible via nginx on frontend-net
-    # The API listens on port 9000 internally (set via PORT in .env.production)
+    # TESTING: Expose API directly for security testing from remote machines
+    ports:
+      - "0.0.0.0:9000:9000"
     expose:
       - "9000"
     networks:
@@ -137,13 +140,14 @@ services:
     restart: unless-stopped
     env_file:
       - ./server/.env
-    # NO port mappings — only accessible from api on backend-net
-    # PostgreSQL binds to the internal Docker network interface only
-    expose:
-      - "5432"
+    # For local testing, expose PostgreSQL to host
+    # In production, remove 'ports' and keep only 'expose'
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./server/config/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./server/config/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./server/config/init-test.sh:/docker-entrypoint-initdb.d/02-init-test.sh:ro
     networks:
       - backend-net
     # postgres MUST NOT be on frontend-net — enforces App→Data isolation

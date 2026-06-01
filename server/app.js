@@ -22,15 +22,15 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'"],
+        scriptSrc: ["'self'", "https://checkout.razorpay.com", "https://accounts.google.com/gsi/client"],
+        styleSrc: ["'self'", "'unsafe-inline'"],  // 'unsafe-inline' needed for Razorpay/Google
         imgSrc: ["'self'", "data:", "https:"],
         connectSrc: [
           "'self'",
           "https://lumberjack.razorpay.com",
           "https://accounts.google.com",
         ],
-        frameSrc: ["https://api.razorpay.com"],
+        frameSrc: ["https://api.razorpay.com", "https://accounts.google.com"],
         objectSrc: ["'none'"],
         upgradeInsecureRequests: [],
       },
