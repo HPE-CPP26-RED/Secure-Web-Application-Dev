@@ -13,7 +13,9 @@ const Product = ({ product }) => {
 
   const addToCart = async (e) => {
     e.preventDefault();
+
     setIsLoading(true);
+
     try {
       await addItem(product, 1);
       toast.success("Added to cart");
@@ -24,45 +26,60 @@ const Product = ({ product }) => {
       setIsLoading(false);
     }
   };
+
   return (
-    <Link to={`/products/${product.slug}`}>
-      <div className="group">
-        <span className="block relative h-48 rounded overflow-hidden">
+    <Link
+      to={`/products/${product.slug}`}
+      className="group relative block overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200/70 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:ring-gray-300"
+    >
+      <CardBody className="!p-0">
+        <div className="relative aspect-square w-full overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100">
           <img
-            className="w-full h-full object-contain object-center"
             src={product.image_url}
             alt={product.name}
             loading="lazy"
-            decoding="async"
-            title={product.name}
+            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
           />
-        </span>
-        <CardBody className="flex flex-col items-stretch mt-4">
-          <h2 className="title-font text-lg font-medium overflow-ellipsis whitespace-nowrap overflow-hidden">
-            {product.name}
-          </h2>
-          <p className="">{formatCurrency(product.price)}</p>
-          <Button
-            iconLeft={() =>
-              isLoading ? (
-                <ClipLoader
-                  cssOverride={{
-                    margin: "0 auto",
-                  }}
-                  color="#01A982"
-                  size={20}
-                />
+
+          <div className="pointer-events-none absolute inset-x-3 bottom-3 hidden translate-y-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 lg:block">
+            <Button
+              icon={isLoading ? undefined : ShoppingCart}
+              disabled={isLoading}
+              onClick={(e) => addToCart(e)}
+              className="pointer-events-auto w-full rounded-xl bg-neutral-900 text-white shadow-lg hover:bg-neutral-800"
+            >
+              {isLoading ? (
+                <ClipLoader size={16} color="#ffffff" />
               ) : (
-                <ShoppingCart className="mr-2" />
-              )
-            }
-            className="mt-4 transition duration-200 ease-out lg:bg-opacity-0 group-hover:bg-opacity-100"
-            onClick={(e) => addToCart(e)}
-          >
-            {isLoading ? null : "Add to Cart"}
-          </Button>
-        </CardBody>
-      </div>
+                "Add to Cart"
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 p-4">
+          <h3 className="line-clamp-1 text-sm font-medium tracking-tight text-gray-900">
+            {product.name}
+          </h3>
+
+          <div className="flex items-center justify-between">
+            <p className="text-base font-semibold text-gray-900">
+              {formatCurrency(product.price)}
+            </p>
+
+            <Button
+              size="small"
+              icon={isLoading ? undefined : ShoppingCart}
+              disabled={isLoading}
+              onClick={(e) => addToCart(e)}
+              className="rounded-full bg-neutral-900 px-3 text-white hover:bg-neutral-800 lg:hidden"
+              aria-label="Add to cart"
+            >
+              {isLoading ? <ClipLoader size={14} color="#ffffff" /> : null}
+            </Button>
+          </div>
+        </div>
+      </CardBody>
     </Link>
   );
 };
