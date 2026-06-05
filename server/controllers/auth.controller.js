@@ -3,8 +3,8 @@
  * Handles HTTP layer for authentication routes.
  *
  * Security controls:
- * - Access token delivered as HttpOnly, Secure, SameSite=Strict cookie
- * - Refresh token delivered as HttpOnly, Secure, SameSite=Strict cookie
+ * - Access token delivered as HttpOnly, Secure, SameSite=None cookie
+ * - Refresh token delivered as HttpOnly, Secure, SameSite=None cookie
  *   scoped to /api/auth/refresh-token
  * - No tokens exposed in response headers or JSON body
  * - Full audit logging for every auth event
@@ -19,20 +19,20 @@ const { logger } = require("../utils/logger");
 
 const isProduction = process.env.NODE_ENV === "production";
 
-/** HttpOnly, Secure, SameSite=Strict access token cookie (15 min) */
+/** HttpOnly, Secure, SameSite=None access token cookie (15 min) */
 const accessCookieOptions = {
   httpOnly: true,
   secure: isProduction, // HTTPS only in production
-  sameSite: "Strict",
+  sameSite: "none",
   maxAge: 15 * 60 * 1000, // 15 minutes in ms
   path: "/",
 };
 
-/** HttpOnly, Secure, SameSite=Strict refresh token cookie (7 days) */
+/** HttpOnly, Secure, SameSite=None refresh token cookie (7 days) */
 const refreshCookieOptions = {
   httpOnly: true,
   secure: isProduction,
-  sameSite: "Strict",
+  sameSite: "none",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
   path: "/api/auth/refresh-token", // Scoped — only sent on refresh endpoint
 };

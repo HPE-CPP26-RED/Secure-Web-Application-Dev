@@ -39,9 +39,8 @@ services:
       - ./server/config/nginx.conf:/etc/nginx/nginx.conf:ro
       # React production build (pre-built via CI/CD or client Dockerfile)
       - ./client/dist:/var/www/html:ro
-      # TLS certificates (mount your certs here)
-      # - ./certs/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
-      # - ./certs/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+      # Let's Encrypt certificates (host path)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     networks:
       - frontend-net
     # nginx MUST NOT be on backend-net — enforces Web→Data isolation
@@ -93,10 +92,8 @@ services:
       - POSTGRES_SSL=false
       - JWT_EXPIRES_IN=15m
       - JWT_REFRESH_EXPIRES_IN=7d
-      # ⚠️ AWS DEPLOYMENT: Update this to your actual EC2 public IP or domain
-      - ALLOWED_ORIGINS=http://13.126.117.114,http://localhost
-      # ⚠️ AWS DEPLOYMENT: Update this to your actual EC2 public IP or domain
-      - CLIENT_URL=http://13.126.117.114:80
+      - ALLOWED_ORIGINS=https://vantagestore.me,https://www.vantagestore.me,http://localhost
+      - CLIENT_URL=https://vantagestore.me
       - SMTP_FROM="Vantage Support <kamatharavind28@gmail.com>"
       - SMTP_USER=kamatharavind28@gmail.com
       - LOG_LEVEL=info
@@ -139,6 +136,10 @@ services:
       - ./server/.env
     # NO port mappings — only accessible from api on backend-net
     # PostgreSQL binds to the internal Docker network interface only
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=your_secure_password
+      - POSTGRES_DB=pernstore
     expose:
       - "5432"
     volumes:
@@ -155,7 +156,7 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "pernstore"]
       interval: 15s
       timeout: 5s
       retries: 5
