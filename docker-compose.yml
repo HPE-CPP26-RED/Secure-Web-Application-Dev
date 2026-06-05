@@ -139,6 +139,10 @@ services:
       - ./server/.env
     # NO port mappings — only accessible from api on backend-net
     # PostgreSQL binds to the internal Docker network interface only
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=your_secure_password
+      - POSTGRES_DB=pernstore
     expose:
       - "5432"
     volumes:
@@ -155,7 +159,7 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "pernstore"]
       interval: 15s
       timeout: 5s
       retries: 5
