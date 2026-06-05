@@ -96,7 +96,7 @@ services:
       - JWT_EXPIRES_IN=15m
       - JWT_REFRESH_EXPIRES_IN=7d
       # ⚠️ AWS DEPLOYMENT: Update this to your actual EC2 public IP or domain
-      - ALLOWED_ORIGINS=http://13.126.117.114,http://localhost
+      - ALLOWED_ORIGINS=http://13.126.117.114,http://localhost,http://172.22.128.1
       # ⚠️ AWS DEPLOYMENT: Update this to your actual EC2 public IP or domain
       - CLIENT_URL=http://13.126.117.114:80
       - SMTP_FROM="Vantage Support <kamatharavind28@gmail.com>"

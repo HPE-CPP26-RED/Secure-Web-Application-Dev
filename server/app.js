@@ -7,7 +7,7 @@ const routes = require("./routes");
 const helmet = require("helmet");
 const compression = require("compression");
 const unknownEndpoint = require("./middleware/unKnownEndpoint");
-const { handleError } = require("./helpers/error");
+const { handleError, ErrorHandler } = require("./helpers/error");
 const { logger, morganStream } = require("./utils/logger");
 const { globalLimiter } = require("./middleware/rateLimiter");
 
@@ -22,8 +22,12 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "https://checkout.razorpay.com", "https://accounts.google.com/gsi/client"],
-        styleSrc: ["'self'", "'unsafe-inline'"],  // 'unsafe-inline' needed for Razorpay/Google
+        scriptSrc: [
+          "'self'",
+          "https://checkout.razorpay.com",
+          "https://accounts.google.com/gsi/client",
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'"], // 'unsafe-inline' needed for Razorpay/Google
         imgSrc: ["'self'", "data:", "https:"],
         connectSrc: [
           "'self'",
@@ -36,7 +40,7 @@ app.use(
       },
     },
     hsts: {
-      maxAge: 31536000,           // 1 year
+      maxAge: 31536000, // 1 year
       includeSubDomains: true,
       preload: true,
     },
@@ -46,20 +50,30 @@ app.use(
 );
 
 // ── CORS ────────────────────────────────────────────────────────────────────
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000,http://localhost:3001")
+const allowedOrigins = (
+  process.env.ALLOWED_ORIGINS || "http://localhost:3000,http://localhost:3001"
+)
   .split(",")
   .map((o) => o.trim());
 
-app.use(cors({
+const corsOptions = {
   credentials: true,
+  preflightContinue: false, // Let cors() respond to OPTIONS automatically
+  optionsSuccessStatus: 204, // Return 204 for successful preflight
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, etc.)
+    // Allow requests with no origin (mobile apps, curl, Postman, server-to-server)
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    callback(new Error("Not allowed by CORS"));
+    // Return 403 (not 500) for disallowed origins
+    const err = new ErrorHandler(403, "Not allowed by CORS");
+    callback(err);
   },
-}));
+};
+
+// Handle OPTIONS preflight BEFORE rate limiter (preflights must not be rate-limited)
+app.options("*", cors(corsOptions));
+app.use(cors(corsOptions));
 
 // ── Body parsing ────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10kb" })); // Limit payload size

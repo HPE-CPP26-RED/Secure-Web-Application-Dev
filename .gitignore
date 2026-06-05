@@ -28,3 +28,5 @@ node_modules/
 
 # ── Docker data volume ─────────────────────────────────
 /db/
+
+/test_and_results

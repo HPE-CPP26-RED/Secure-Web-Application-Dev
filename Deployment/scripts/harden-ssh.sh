@@ -49,8 +49,13 @@ apply_setting "PermitEmptyPasswords"   "no"
 echo "==> [SSH] Validating sshd_config syntax..."
 sshd -t
 
-echo "==> [SSH] Restarting sshd..."
-systemctl restart sshd
+echo "==> [SSH] Restarting SSH daemon..."
+# Ubuntu uses 'sshd', Kali/Debian uses 'ssh'
+if systemctl list-units --type=service | grep -q "sshd.service"; then
+  systemctl restart sshd
+else
+  systemctl restart ssh
+fi
 
 echo "==> [SSH] Hardening complete ✔"
 echo ""
