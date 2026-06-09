@@ -1,41 +1,42 @@
-# Security Automation — Phase 2: Vulnerability Scanning
+# Security Automation — Phase 3: Scheduled Scanning & Retention
 
 This directory contains security automation scripts, configuration, and reports for the PERN-Store project.
 
 ## Overview
 
-The security automation is being implemented in phases:
+The security automation is implemented in phases:
 
 - **Phase 1**: SBOM generation using Syft
-- **Phase 2** (Current): Vulnerability scanning with Grype
-- **Phase 3** (Future): Report retention and historical tracking
+- **Phase 2**: Vulnerability scanning with Grype
+- **Phase 3** (Current): Scheduled orchestration and 5-day report retention
 - **Phases 4-5**: Additional security hardening and compliance automation
 
 ## Directory Structure
 
 ```
 security/
-├── README.md                 # This file
+├── SBOM_README.md            # This file
+├── .security-scan.lock       # Runtime lock file (created on first scan)
 ├── monitoring/               # System monitoring configurations
 │   ├── aide.conf            # File integrity monitoring rules
 │   └── audit.rules          # Linux audit rules
-├── reports/                  # Generated security reports
+├── reports/
 │   ├── defense-in-depth-report.md  # Architecture & threat model
-│   ├── sbom/                # Software Bill of Materials
-│   │   ├── nginx-1.25-alpine-2026-06-08.cdx.json
-│   │   ├── nginx-1.25-alpine-2026-06-08.md
+│   ├── logs/                # Daily execution logs (5-day retention)
+│   │   └── security-YYYY-MM-DD.log
+│   ├── sbom/                # Software Bill of Materials (5-day retention)
+│   │   ├── nginx_1.25-alpine-YYYY-MM-DD.cdx.json
+│   │   ├── nginx_1.25-alpine-YYYY-MM-DD.md
 │   │   └── ...
-│   └── vulnerabilities/      # Vulnerability scan reports
-│       ├── nginx-1.25-alpine-2026-06-08.json
-│       ├── nginx-1.25-alpine-2026-06-08.md
+│   └── vulnerabilities/     # Vulnerability scan reports (5-day retention)
+│       ├── nginx_1.25-alpine-YYYY-MM-DD.json
+│       ├── nginx_1.25-alpine-YYYY-MM-DD.md
 │       └── ...
-├── scripts/                  # Security automation scripts
-│   ├── generate-sbom.sh     # Generate SBOMs for containers
-│   └── vulnerability-scan.sh  # Scan SBOMs for vulnerabilities
-└── legacy/                   # Archived/superseded files
-    ├── generate-sbom.py     # Previous SBOM generation approach
-    ├── sbom/                # Previous SBOM artifacts
-    └── vex/                 # Previous vulnerability analysis
+└── scripts/
+    ├── generate-sbom.sh        # Phase 1 — SBOM generation
+    ├── vulnerability-scan.sh   # Phase 2 — vulnerability scanning
+    ├── security-daily.sh       # Phase 3 — daily orchestration (this phase)
+    └── cleanup-old-reports.sh  # Phase 3 — 5-day retention cleanup
 ```
 
 ---
@@ -44,32 +45,105 @@ security/
 
 ### Purpose
 
-Generate **Software Bill of Materials (SBOM)** for all containerized components of the PERN-Store application. This provides a comprehensive inventory of all software dependencies, versions, and package types across:
+Generate **Software Bill of Materials (SBOM)** for all containerized components of the production PERN-Store stack. This provides a comprehensive inventory of all software dependencies, versions, and package types across:
 
-- Frontend container (nginx)
-- Backend API container (Node.js server)
-- Database container (PostgreSQL)
+- Frontend / reverse proxy (nginx)
+- Backend API (Node.js server)
+- Database (PostgreSQL)
 
-### Requirements
+### Why Only Deployed Images Are Scanned
 
-#### Syft
+The script discovers images exclusively from `docker-compose.yml` — the authoritative declaration of the production stack. Only images referenced there and matching the [allowlist](#image-allowlist) are scanned.
 
-Syft is a CLI tool that generates Software Bill of Materials (SBOM) from container images and filesystems.
+**This is intentional.** The local Docker image cache accumulates images over time from builds, pulls, and experiments. Scanning everything on the host would produce noise: SBOMs for intermediate build stages, old versions of images that are no longer deployed, and utility containers that are not part of the running application. None of those represent the actual attack surface of the deployed system.
+
+By anchoring discovery to the compose file, every generated SBOM maps 1:1 to a component that is actually running in production.
+
+### Why Utility Images Are Excluded
+
+The compose file includes `adminer:latest` for local database administration. Adminer is a development convenience tool — it is not part of the production application and is not exposed externally. Including it in security scanning would:
+
+- Inflate vulnerability reports with findings that are not actionable for the deployed system
+- Create ambiguity about what "the application" actually is
+- Add noise to future automated alerting in Phase 3
+
+The [allowlist](#image-allowlist) makes this exclusion explicit and auditable. Adding an image to the allowlist is a deliberate act, not the default.
+
+### Why Image-Based Scanning (Not Container-Based)
+
+SBOMs are generated from **Docker images** rather than from running containers. The reasons:
+
+1. **Reproducibility** — an image is immutable; a running container may have mutable state overlaid on top. Scanning the image gives a stable, reproducible inventory of installed packages.
+
+2. **Independence from uptime** — image scanning works whether or not the container is currently running. This is required for Phase 3 scheduled execution, where scans may run on a schedule regardless of container state.
+
+3. **Scope clarity** — container-based tools scan the union of the image layers plus any runtime changes. Image-based scanning targets only what was intentionally built into the image, which is the relevant security surface.
+
+4. **Syft compatibility** — Syft's `docker:image-name` source targets the image directly, which produces complete package manifests from all layers.
+
+### Image Allowlist
+
+The allowlist is defined at the top of `generate-sbom.sh`:
+
+```bash
+ALLOWED_IMAGES=(
+    "nginx"
+    "pern-store-api-prod"
+    "postgres"
+)
+```
+
+Matching is performed against the repository portion of the image name (the part before `:`). Any image discovered from the compose file or running containers whose repository does not appear in this list is silently skipped and logged.
+
+**To add an image:** append its repository name to the array.
+
+**To remove an image:** delete its entry from the array. The next run will no longer generate an SBOM for it.
+
+### Expected Scan Set
+
+When run against the current production stack, the script scans:
+
+```
+nginx:1.25-alpine        — reverse proxy / static file server
+pern-store-api-prod      — Node.js backend API
+postgres:16-alpine       — PostgreSQL database
+```
+
+Skipped (not in allowlist):
+```
+adminer:latest           — local DB admin UI, not part of the production stack
+```
+
+---
+
+## Phase 3: Future Automation
+
+Phase 3 will introduce scheduled execution of the SBOM and vulnerability scan pipeline. The `generate-sbom.sh` script is already structured for this:
+
+| Property | Detail |
+|----------|--------|
+| **Exit codes** | `0` = all images scanned successfully; `1` = one or more failures |
+| **Timestamps** | Filenames use `YYYY-MM-DD` format for retention policy enforcement |
+| **Idempotent** | Re-running on the same day overwrites that day's reports cleanly |
+| **Log directory** | `security/reports/logs/` exists and is ready to receive execution logs |
+
+No cron jobs or scheduled tasks have been created yet. Phase 3 will wire up the scheduler and implement log rotation and retention policies using the same script without modification.
+
+---
+
+## Requirements
+
+### Syft
+
+Syft generates SBOMs from container images and filesystems.
 
 **Homepage:** https://github.com/anchore/syft
 
-**Installation:**
-
-The `generate-sbom.sh` script will **automatically install Syft** if it's not already present.
+The `generate-sbom.sh` script will **automatically install Syft** if it is not already present.
 
 To manually install:
 
-**Linux (Debian/Ubuntu):**
-```bash
-curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-```
-
-**Linux (RHEL/CentOS):**
+**Linux:**
 ```bash
 curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
 ```
@@ -79,33 +153,29 @@ curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -
 brew install syft
 ```
 
-**Docker (Alternative):**
-```bash
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock anchore/syft:latest <image>
-```
-
-#### Additional Tools
+### Additional Tools
 
 - **Docker**: For container access and image inspection
-- **jq**: For JSON parsing (usually pre-installed on Linux systems)
+- **jq**: For JSON parsing
   ```bash
-  # Install jq if needed
   apt-get install jq  # Debian/Ubuntu
   brew install jq     # macOS
   ```
 
-#### Docker Access
+### Docker Access
 
-Ensure your user is in the `docker` group to run Docker commands without `sudo`:
+Ensure your user is in the `docker` group:
 
 ```bash
 sudo usermod -aG docker $USER
 # Log out and back in for group membership to take effect
 ```
 
-### Usage
+---
 
-Generate SBOMs for all running containers:
+## Usage
+
+### Step 1: Generate SBOMs
 
 ```bash
 # From project root
@@ -114,37 +184,45 @@ bash ./security/scripts/generate-sbom.sh
 
 The script will:
 
-1. **Verify** Syft and jq are installed (auto-install Syft if needed)
-2. **Discover** all running Docker containers via `docker ps`
-3. **Normalize** container image names to short service names (nginx, server, postgres)
-4. **Generate** CycloneDX JSON SBOM for each container image using Syft
-5. **Parse** the JSON and generate human-readable Markdown summaries
-6. **Save** both formats to `security/reports/sbom/`
+1. Verify Syft and jq are installed (auto-install Syft if needed)
+2. Discover images from `docker-compose.yml` via `docker compose config --images`
+3. Apply the allowlist — skip any image not in `ALLOWED_IMAGES`
+4. Generate CycloneDX JSON SBOM for each allowed image using Syft
+5. Parse the JSON and generate a human-readable Markdown summary
+6. Save both formats to `security/reports/sbom/`
 
-### Output
+### Step 2: Scan for Vulnerabilities
 
-For each running container, the script generates two files:
-
-**CycloneDX JSON Format** (Machine-readable):
-```
-security/reports/sbom/nginx-2026-06-08.cdx.json
-security/reports/sbom/server-2026-06-08.cdx.json
-security/reports/sbom/postgres-2026-06-08.cdx.json
+```bash
+bash ./security/scripts/vulnerability-scan.sh
 ```
 
-**Markdown Summary** (Human-readable):
+---
+
+## Output
+
+For each scanned image, two files are generated:
+
+**CycloneDX JSON** (machine-readable, for Grype and CI/CD tools):
 ```
-security/reports/sbom/nginx-2026-06-08.md
-security/reports/sbom/server-2026-06-08.md
-security/reports/sbom/postgres-2026-06-08.md
+security/reports/sbom/nginx_1.25-alpine-2026-06-09.cdx.json
+security/reports/sbom/pern-store-api-prod-2026-06-09.cdx.json
+security/reports/sbom/postgres_16-alpine-2026-06-09.cdx.json
 ```
 
-#### Markdown Report Example
+**Markdown Summary** (human-readable):
+```
+security/reports/sbom/nginx_1.25-alpine-2026-06-09.md
+security/reports/sbom/pern-store-api-prod-2026-06-09.md
+security/reports/sbom/postgres_16-alpine-2026-06-09.md
+```
+
+### Markdown Report Example
 
 ```markdown
-# SBOM Report: nginx
+# SBOM Report: nginx:1.25-alpine
 
-**Generated:** 2026-06-08T15:30:45Z
+**Generated:** 2026-06-09T10:00:00Z
 
 **Container Image:** `nginx:1.25-alpine`
 
@@ -156,92 +234,11 @@ security/reports/sbom/postgres-2026-06-08.md
 
 | Package Name | Version | Type |
 |--------------|---------|------|
-| `alpine-base` | 2.12.10 | library |
-| `curl` | 8.2.1 | library |
-| `openssl` | 3.1.2 | library |
+| `alpine-base` | 3.18.4 | library |
+| `curl` | 8.4.0 | library |
+| `openssl` | 3.1.3 | library |
 | ... | ... | ... |
 ```
-
-### SBOM Format: CycloneDX
-
-The JSON output adheres to the [CycloneDX Specification](https://cyclonedx.org/), a lightweight BOM standard for identifying components and their vulnerabilities.
-
-**Key fields in generated JSON:**
-- `specVersion`: CycloneDX specification version (typically 1.5)
-- `components`: Array of discovered packages
-  - `name`: Package name
-  - `version`: Package version
-  - `type`: Package type (library, framework, application, etc.)
-  - `purl`: Package URL (standardized identifier)
-  - `licenses`: License information
-  - `hashes`: Cryptographic hashes (SHA-256, etc.)
-
-### Example: Running the Script
-
-```bash
-$ cd /home/kamath/e-commerce/PERN-Store
-$ bash ./security/scripts/generate-sbom.sh
-
-╔════════════════════════════════════════════════════════════════════╗
-║                 SBOM Generation Workflow - Phase 1                  ║
-╚════════════════════════════════════════════════════════════════════╝
-
-ℹ️  Verifying prerequisites...
-✓ Syft is installed
-✓ Output directory ready: /home/kamath/e-commerce/PERN-Store/security/reports/sbom
-ℹ️  Discovering running containers...
-✓ Found 3 running container(s)
-
-ℹ️  Scanning: nginx:1.25-alpine → nginx
-✓ Generated SBOM JSON: /home/kamath/e-commerce/PERN-Store/security/reports/sbom/nginx-2026-06-08.cdx.json
-✓ Generated Markdown report: /home/kamath/e-commerce/PERN-Store/security/reports/sbom/nginx-2026-06-08.md
-
-ℹ️  Scanning: pern-prod-api → server
-✓ Generated SBOM JSON: /home/kamath/e-commerce/PERN-Store/security/reports/sbom/server-2026-06-08.cdx.json
-✓ Generated Markdown report: /home/kamath/e-commerce/PERN-Store/security/reports/sbom/server-2026-06-08.md
-
-ℹ️  Scanning: postgres:15-alpine → postgres
-✓ Generated SBOM JSON: /home/kamath/e-commerce/PERN-Store/security/reports/sbom/postgres-2026-06-08.cdx.json
-✓ Generated Markdown report: /home/kamath/e-commerce/PERN-Store/security/reports/sbom/postgres-2026-06-08.md
-
-╔════════════════════════════════════════════════════════════════════╗
-║                              Summary                               ║
-╚════════════════════════════════════════════════════════════════════╝
-
-✓ Generated SBOMs: 3
-ℹ️  Output directory: /home/kamath/e-commerce/PERN-Store/security/reports/sbom
-
-Generated files:
-  • nginx-2026-06-08.cdx.json
-  • nginx-2026-06-08.md
-  • postgres-2026-06-08.cdx.json
-  • postgres-2026-06-08.md
-  • server-2026-06-08.cdx.json
-  • server-2026-06-08.md
-```
-
----
-
-## Monitoring (aide.conf, audit.rules)
-
-The `monitoring/` directory contains system-level monitoring configurations:
-
-- **aide.conf**: Advanced Intrusion Detection Environment rules for file integrity monitoring
-- **audit.rules**: Linux auditd rules for real-time system change detection
-
-These configurations are stable and actively used by the deployed system. They are not modified during Phase 1 refactoring.
-
----
-
-## Legacy Files
-
-The `legacy/` directory contains previous implementations that have been superseded:
-
-- **generate-sbom.py**: Previous Python-based SBOM generation from npm lockfiles
-- **sbom/**: Previous SBOM artifacts generated from package-lock.json
-- **vex/**: Previous vulnerability analysis using npm audit
-
-These are preserved for audit trail purposes and comparison with new Syft-based approach.
 
 ---
 
@@ -249,21 +246,15 @@ These are preserved for audit trail purposes and comparison with new Syft-based 
 
 ### Purpose
 
-Scan generated SBOMs for known vulnerabilities using Grype, a vulnerability scanner for container images and filesystems. This phase consumes the CycloneDX SBOMs from Phase 1 and produces vulnerability reports.
+Scan generated SBOMs for known vulnerabilities using Grype. This phase consumes the CycloneDX SBOMs from Phase 1 and produces vulnerability reports.
 
 ### Requirements
 
 #### Grype
 
-Grype is a CLI tool that scans SBOMs and container images for vulnerabilities.
-
 **Homepage:** https://github.com/anchore/grype
 
-**Installation:**
-
-The `vulnerability-scan.sh` script will **automatically install Grype** if it's not already present.
-
-To manually install:
+The `vulnerability-scan.sh` script will **automatically install Grype** if it is not already present.
 
 **Linux:**
 ```bash
@@ -275,113 +266,227 @@ curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh 
 brew install grype
 ```
 
-**Docker (Alternative):**
-```bash
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock anchore/grype:latest sbom:<sbom-file>
-```
-
-### Usage
-
-Run vulnerability scanning on generated SBOMs:
-
-```bash
-# From project root
-bash ./security/scripts/vulnerability-scan.sh
-```
-
-The script will:
-
-1. **Verify** Grype and jq are installed (auto-install Grype if needed)
-2. **Discover** all `.cdx.json` SBOM files in `security/reports/sbom/`
-3. **Scan** each SBOM using `grype sbom:<file>` for vulnerabilities
-4. **Generate** JSON vulnerability report and Markdown summary for each SBOM
-5. **Save** outputs to `security/reports/vulnerabilities/`
-
-### Output
-
-For each SBOM, the script generates two files:
-
-**JSON Vulnerability Report** (Machine-readable):
-```
-security/reports/vulnerabilities/nginx-1.25-alpine-2026-06-08.json
-```
-
-**Markdown Summary** (Human-readable):
-```
-security/reports/vulnerabilities/nginx-1.25-alpine-2026-06-08.md
-```
-
-#### Markdown Report Example
+### Vulnerability Report Example
 
 ```markdown
 # Vulnerability Report
 
-Generated: 2026-06-08T12:00:00Z
+Generated: 2026-06-09T12:00:00Z
 
-Source SBOM:
-nginx-1.25-alpine-2026-06-08.cdx.json
+Source SBOM: nginx_1.25-alpine-2026-06-09.cdx.json
 
 ## Summary
 
 | Severity | Count |
 |----------|-------|
-| Critical | 2 |
-| High | 5 |
-| Medium | 12 |
-| Low | 8 |
-| Negligible | 3 |
+| Critical | 0 |
+| High | 2 |
+| Medium | 8 |
+| Low | 5 |
+| Negligible | 1 |
 
 ## Vulnerabilities
 
 | Package | Installed Version | Severity | CVE |
 |---------|-----------------|----------|-----|
-| `openssl` | 3.1.2 | Critical | CVE-2024-12345 |
-| `curl` | 8.2.1 | High | CVE-2024-54321 |
+| `curl` | 8.4.0 | High | CVE-2024-xxxxx |
 | ... | ... | ... | ... |
 ```
 
-### Workflow
+---
 
-The complete workflow requires running scripts sequentially:
+## Phase 3: Scheduled Orchestration & Retention
+
+### Scripts
+
+#### security-daily.sh — Daily Orchestration
 
 ```bash
-# Step 1: Generate SBOMs from Docker images
-./security/scripts/generate-sbom.sh
-
-# Step 2: Scan SBOMs for vulnerabilities
-./security/scripts/vulnerability-scan.sh
+bash ./security/scripts/security-daily.sh
 ```
 
-### JSON vs Markdown Reports
+Runs the full pipeline in sequence:
 
-- **JSON Reports**: Raw Grype output for programmatic processing, integration with other tools, or CI/CD pipelines
-- **Markdown Reports**: Human-readable summaries with severity counts and vulnerability tables for review
+1. `generate-sbom.sh` — SBOM generation
+2. `vulnerability-scan.sh` — vulnerability scanning
+3. `cleanup-old-reports.sh` — report retention enforcement
+
+Stages always run in order. If SBOM generation fails, vulnerability scanning still proceeds (it will scan any previously generated SBOMs). Cleanup always runs — stale reports are never allowed to accumulate due to a scan failure.
+
+Returns `0` when all three stages succeed. Returns `1` if any stage fails.
+
+#### cleanup-old-reports.sh — Retention Cleanup
+
+```bash
+bash ./security/scripts/cleanup-old-reports.sh
+```
+
+Removes files older than **5 days** from:
+
+- `security/reports/sbom/`
+- `security/reports/vulnerabilities/`
+- `security/reports/logs/`
+
+Logs the count of removed files per directory. Never touches scripts, monitoring configs, source code, or `.gitkeep` marker files.
+
+---
+
+### Manual Usage
+
+All scripts remain independently executable:
+
+```bash
+# Generate SBOMs only
+bash ./security/scripts/generate-sbom.sh
+
+# Scan SBOMs for vulnerabilities only
+bash ./security/scripts/vulnerability-scan.sh
+
+# Run the full pipeline (SBOM + scan + cleanup)
+bash ./security/scripts/security-daily.sh
+
+# Run retention cleanup only
+bash ./security/scripts/cleanup-old-reports.sh
+```
+
+---
+
+### Automated Usage (Cron)
+
+**Do not install cron entries automatically.** Install manually when ready to schedule.
+
+To schedule the daily scan at 02:00 AM, add this entry to the crontab of the user with Docker access:
+
+```bash
+crontab -e
+```
+
+```cron
+0 2 * * * /absolute/path/to/security/scripts/security-daily.sh
+```
+
+For example, if the project is at `/home/kamath/e-commerce/PERN-Store`:
+
+```cron
+0 2 * * * /home/kamath/e-commerce/PERN-Store/security/scripts/security-daily.sh
+```
+
+The script uses absolute paths internally, so it runs correctly from any working directory.
+
+---
+
+### Concurrency Protection
+
+`security-daily.sh` acquires an exclusive lock using `flock` on:
+
+```
+security/.security-scan.lock
+```
+
+If a scan is already running (scheduled or manual), any subsequent invocation exits immediately with:
+
+```
+Another security scan is already running. Exiting safely.
+```
+
+The lock is released automatically when the script exits — including on `SIGTERM`, `SIGKILL`, or any error exit — because the lock is tied to a file descriptor, not a PID file that requires manual cleanup.
+
+This prevents a cron-triggered run from overlapping with a concurrent manual run, and vice versa.
+
+---
+
+### Execution Log Format
+
+Each run writes `security/reports/logs/security-YYYY-MM-DD.log`.
+
+Re-running on the same day overwrites that day's log (idempotent). Example log structure:
+
+```
+[2026-06-09T02:00:01Z] === Security Daily Scan Started ===
+[2026-06-09T02:00:01Z] Date:        2026-06-09
+[2026-06-09T02:00:01Z] Log file:    .../security/reports/logs/security-2026-06-09.log
+[2026-06-09T02:00:01Z] Lock acquired: .../security/.security-scan.lock
+[2026-06-09T02:00:01Z] STAGE START: SBOM Generation
+... (generate-sbom.sh output) ...
+[2026-06-09T02:01:15Z] STAGE OK:   SBOM Generation — completed in 74s
+[2026-06-09T02:01:15Z] STAGE START: Vulnerability Scanning
+... (vulnerability-scan.sh output) ...
+[2026-06-09T02:05:42Z] STAGE OK:   Vulnerability Scanning — completed in 267s
+[2026-06-09T02:05:42Z] STAGE START: Report Cleanup
+... (cleanup-old-reports.sh output) ...
+[2026-06-09T02:05:43Z] STAGE OK:   Report Cleanup — completed in 1s
+[2026-06-09T02:05:43Z] === Execution Summary ===
+[2026-06-09T02:05:43Z] End time:    2026-06-09T02:05:43Z
+[2026-06-09T02:05:43Z] Duration:    342s
+[2026-06-09T02:05:43Z] SBOM:        SUCCESS
+[2026-06-09T02:05:43Z] Vulnscan:    SUCCESS
+[2026-06-09T02:05:43Z] Cleanup:     SUCCESS
+[2026-06-09T02:05:43Z] Overall:     SUCCESS
+```
+
+---
+
+### Retention Policy
+
+Security reports and logs older than **5 days** are automatically removed on each daily run.
+
+The 5-day window is intentional: the VM has 16 GB total disk capacity, and SBOMs + vulnerability reports for three images generate approximately 30–50 MB per day. A 5-day window retains enough history for review without risk of disk exhaustion.
+
+| Directory | Retention |
+|-----------|-----------|
+| `security/reports/sbom/` | 5 days |
+| `security/reports/vulnerabilities/` | 5 days |
+| `security/reports/logs/` | 5 days |
+
+---
+
+### Safety Guarantees
+
+The security scanning pipeline is **strictly read-only** with respect to the running application.
+
+| Guarantee | Detail |
+|-----------|--------|
+| Containers never restarted | No `docker restart`, `docker compose restart`, or `docker compose up` |
+| Containers never stopped | No `docker stop` or `docker compose down` |
+| Images never rebuilt | No `docker build` |
+| Images never pulled | No `docker pull` |
+| Application traffic never interrupted | Nginx and API containers are not touched |
+| Database never modified | No writes to PostgreSQL |
+| Docker networking unchanged | No network creation or removal |
+| Write scope limited | Only `security/reports/` subdirectories and the lock file |
+
+The scripts only call:
+
+- `docker compose config --images` — reads compose file metadata
+- `syft <image>` — reads image layers, produces SBOM
+- `grype sbom:<file>` — reads SBOM file, queries vulnerability database
+- `find ... -delete` — removes old report files from `security/reports/`
 
 ---
 
 ## Security Constraints
 
-⚠️ **The following are NOT modified during Phase 1 refactoring:**
+The following are **not modified** by any script in this directory:
 
-- Application source code (server/, client/)
-- Dockerfiles (frontend, backend, database)
-- docker-compose configurations
-- nginx configuration (server/config/nginx.conf)
+- Application source code (`server/`, `client/`)
+- Dockerfiles
+- `docker-compose.yml` and `docker-compose.dev.yml`
+- nginx configuration (`server/config/nginx.conf`)
 - Database schema and migrations
 - CI/CD pipelines
-- System monitoring rules (aide.conf, audit.rules)
+- System monitoring rules (`aide.conf`, `audit.rules`)
 
 ---
 
 ## Support & Documentation
 
 - **Syft Docs**: https://github.com/anchore/syft
+- **Grype Docs**: https://github.com/anchore/grype
 - **CycloneDX Spec**: https://cyclonedx.org/
-- **Anchore Resources**: https://anchore.com/sbom
-- **Project Defense-in-Depth Report**: See `security/reports/defense-in-depth-report.md`
+- **Project Defense-in-Depth Report**: `security/reports/defense-in-depth-report.md`
 
 ---
 
-**Last Updated:** 2026-06-08  
-**Phase:** 2 (Vulnerability Scanning)  
+**Last Updated:** 2026-06-09
+**Phase:** 3 (Scheduled Orchestration & Retention)
 **Status:** Active Development
