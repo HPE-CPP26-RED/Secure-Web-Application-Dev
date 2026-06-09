@@ -254,7 +254,7 @@ discover_images() {
 
     # ── Option 2: Running containers (fallback) ───────────────────────────────
     if [[ ${#raw_images[@]} -eq 0 ]]; then
-        log_warn "Docker Compose metadata unavailable — falling back to running containers"
+        log_warn "Docker Compose metadata unavailable — falling back to running containers" >&2
         local container_images
         if container_images=$(docker ps -a --format "{{.Image}}" 2>/dev/null); then
             while IFS= read -r img; do
@@ -267,11 +267,11 @@ discover_images() {
     fi
 
     if [[ ${#raw_images[@]} -eq 0 ]]; then
-        log_warn "No images discovered from any source"
+        log_warn "No images discovered from any source" >&2
         return 0
     fi
 
-    log_info "Image source: $source_desc"
+    log_info "Image source: $source_desc" >&2
 
     # ── Deduplicate and apply allowlist ───────────────────────────────────────
     local seen=()
@@ -295,7 +295,7 @@ discover_images() {
     done
 
     if [[ ${#skipped[@]} -gt 0 ]]; then
-        log_info "Skipped (not in allowlist): ${skipped[*]}"
+        log_info "Skipped (not in allowlist): ${skipped[*]}" >&2
     fi
 
     printf '%s\n' "${allowed_found[@]+"${allowed_found[@]}"}"
@@ -335,6 +335,10 @@ main() {
     log_info "Discovering images from deployed stack..."
     local images
     images=$(discover_images)
+
+    log_info "Final image list:"
+    printf '%s\n' "$images"
+    echo ""
 
     if [[ -z "$images" ]]; then
         log_warn "No allowed images found — nothing to scan"
