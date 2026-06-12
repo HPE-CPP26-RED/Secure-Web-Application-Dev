@@ -74,3 +74,17 @@ echo "Starting Docker Compose orchestration..."
 docker compose -f docker-compose.yml up -d --build
 
 echo "Deployment complete. Frontend built and containers active."
+
+echo "Applying production file permissions..."
+
+# 1. Grant Nginx read access to the compiled React frontend
+sudo chmod -R 755 ./client/dist
+
+# 2. Grant Nginx read access to the Let's Encrypt certificates
+sudo chmod 755 /etc/letsencrypt/live/
+sudo chmod 755 /etc/letsencrypt/archive/
+
+# 3. Force Nginx to reload its configuration just in case
+docker exec pern-prod-nginx nginx -s reload
+
+echo "Deployment complete and secured."
