@@ -37,8 +37,8 @@ services:
       - "0.0.0.0:80:80"
       - "0.0.0.0:443:443"
     volumes:
-      # Hardened Nginx configuration
-      - ./server/config/nginx.conf:/etc/nginx/nginx.conf:ro
+      # DEV: HTTP-only nginx config (no SSL certs needed)
+      - ./server/config/nginx.dev.conf:/etc/nginx/nginx.conf:ro
       # React production build (pre-built via CI/CD or client Dockerfile)
       - ./client/dist:/var/www/html:ro
       # TLS certificates (mount your certs here)

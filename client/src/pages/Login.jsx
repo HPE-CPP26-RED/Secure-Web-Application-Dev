@@ -1,10 +1,5 @@
 import { useGoogleLogin } from "@react-oauth/google";
-import {
-  Button,
-  HelperText,
-  Input,
-  Label,
-} from "@windmill/react-ui";
+import { Button, HelperText, Input, Label } from "@windmill/react-ui";
 import ForgotPasswordModal from "components/ForgotPasswordModal";
 import { useUser } from "context/UserContext";
 import Layout from "layout/Layout";
@@ -87,7 +82,7 @@ const Login = () => {
       setIsLoading(false);
       const res = error.response;
       if (res?.data?.errors && res.data.errors.length > 0) {
-        setError(res.data.errors.map(err => err.message).join(", "));
+        setError(res.data.errors.map((err) => err.message).join(", "));
       } else {
         setError(res?.data?.message || "An error occurred");
       }
@@ -132,12 +127,18 @@ const Login = () => {
 
   return (
     <Layout title="Login">
-      <div className="flex items-center justify-center m-auto mt-20">
+      <div className="relative min-h-[75vh] flex items-center justify-center m-auto py-10 px-4 overflow-hidden w-full">
+        {/* Glow blobs for premium glassmorphism background */}
+        <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-emerald-400/20 dark:bg-emerald-500/10 rounded-full blur-3xl animate-pulse pointer-events-none"></div>
+        <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-80 h-80 bg-teal-400/20 dark:bg-teal-500/10 rounded-full blur-3xl animate-pulse pointer-events-none [animation-delay:1.5s]"></div>
+
         <form
-          className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4 flex flex-col w-full md:w-1/2"
+          className="relative bg-white/70 dark:bg-neutral-900/60 backdrop-blur-md border border-white/30 dark:border-neutral-800/40 shadow-2xl rounded-2xl px-8 pt-6 pb-8 mb-4 flex flex-col w-full md:w-1/2 max-w-lg z-10 transition-all duration-300 hover:shadow-emerald-500/5"
           onSubmit={mfaRequired ? handleMfaLogin : handleSubmit(onSubmit)}
         >
-          <h1 className="text-center text-4xl my-4">Continue Shopping</h1>
+          <h1 className="text-center text-4xl font-extrabold my-4 bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
+            Continue Shopping
+          </h1>
           {mfaRequired ? (
             <>
               <div className="mt-4">
@@ -256,7 +257,7 @@ const Login = () => {
                   "Login in with Google"
                 )}
               </Button>
-              <p className="text-sm mt-4">
+              <p className="text-sm mt-4 text-slate-400">
                 Don&apos;t have an account?{" "}
                 <Link to="/signup" className="font-bold">
                   Sign Up

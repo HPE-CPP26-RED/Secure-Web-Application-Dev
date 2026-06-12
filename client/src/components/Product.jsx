@@ -30,53 +30,40 @@ const Product = ({ product }) => {
   return (
     <Link
       to={`/products/${product.slug}`}
-      className="group relative block overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200/70 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:ring-gray-300"
+      className="group relative block overflow-hidden rounded-2xl bg-white dark:bg-neutral-900 shadow-sm ring-1 ring-gray-200/50 dark:ring-neutral-800/40 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:ring-gray-300 dark:hover:ring-neutral-700"
     >
       <CardBody className="!p-0">
-        <div className="relative aspect-square w-full overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="relative aspect-square w-full overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 dark:from-neutral-800 dark:to-neutral-900">
           <img
             src={product.image_url}
             alt={product.name}
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
           />
+        </div>
 
-          <div className="pointer-events-none absolute inset-x-3 bottom-3 hidden translate-y-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 lg:block">
-            <Button
-              icon={isLoading ? undefined : ShoppingCart}
+        <div className="flex flex-col gap-1.5 p-4">
+          <h3 className="line-clamp-1 text-sm font-semibold tracking-tight text-gray-800 dark:text-gray-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+            {product.name}
+          </h3>
+
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-base font-bold text-gray-900 dark:text-gray-100">
+              {formatCurrency(product.price)}
+            </p>
+
+            <button
               disabled={isLoading}
               onClick={(e) => addToCart(e)}
-              className="pointer-events-auto w-full rounded-xl bg-neutral-900 text-white shadow-lg hover:bg-neutral-800"
+              className="flex items-center justify-center p-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/20 active:scale-95 transition-all duration-300 disabled:opacity-50"
+              aria-label="Add to cart"
             >
               {isLoading ? (
                 <ClipLoader size={16} color="#ffffff" />
               ) : (
-                "Add to Cart"
+                <ShoppingCart size={16} className="stroke-[2]" />
               )}
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2 p-4">
-          <h3 className="line-clamp-1 text-sm font-medium tracking-tight text-gray-900">
-            {product.name}
-          </h3>
-
-          <div className="flex items-center justify-between">
-            <p className="text-base font-semibold text-gray-900">
-              {formatCurrency(product.price)}
-            </p>
-
-            <Button
-              size="small"
-              icon={isLoading ? undefined : ShoppingCart}
-              disabled={isLoading}
-              onClick={(e) => addToCart(e)}
-              className="rounded-full bg-neutral-900 px-3 text-white hover:bg-neutral-800 lg:hidden"
-              aria-label="Add to cart"
-            >
-              {isLoading ? <ClipLoader size={14} color="#ffffff" /> : null}
-            </Button>
+            </button>
           </div>
         </div>
       </CardBody>

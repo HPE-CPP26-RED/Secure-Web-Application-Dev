@@ -44,6 +44,7 @@ CREATE TABLE pernstore_test.products (
     price real NOT NULL,
     description text NOT NULL,
     image_url character varying,
+    category character varying(50) DEFAULT 'Uncategorized' NOT NULL,
     PRIMARY KEY (product_id)
 );
 
