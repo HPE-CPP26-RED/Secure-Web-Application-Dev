@@ -142,11 +142,11 @@ const Login = () => {
           {mfaRequired ? (
             <>
               <div className="mt-4">
-                <Label className="block text-grey-darker text-sm font-bold mb-2">
+                <Label className="block text-grey-darker text-sm font-bold mb-5">
                   <span>MFA Code</span>
                 </Label>
                 <Input
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-grey-darker"
+                  className="shadow mt-10 appearance-none border rounded w-full py-2 px-3 text-grey-darker"
                   type="text"
                   inputMode="numeric"
                   maxLength={6}

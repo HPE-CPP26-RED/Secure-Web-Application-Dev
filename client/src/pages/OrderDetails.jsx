@@ -18,7 +18,7 @@ const OrderDetails = () => {
   return (
     <Layout>
       <div className="my-4">
-        <h1 className="font-bold text-2xl">Order Details</h1>
+        <h1 className="font-bold dark:text-gray-300 text-2xl">Order Details</h1>
         <p>Order no: #{state.order.order_id}</p>
         <p>{`${state.order.total || "Not available"} items`}</p>
         <p>

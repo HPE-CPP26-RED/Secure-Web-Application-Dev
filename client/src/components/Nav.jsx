@@ -1,5 +1,6 @@
 import { Badge, Button, Dropdown, DropdownItem, Transition } from "@windmill/react-ui";
 import { useCart } from "context/CartContext";
+import { useTheme } from "context/ThemeContext";
 import { useUser } from "context/UserContext";
 import { useEffect, useState } from "react";
 import { LogOut, Moon, ShoppingCart, Sun, User } from "react-feather";
@@ -7,29 +8,13 @@ import { Link } from "react-router-dom";
 
 const Nav = () => {
   const { cartTotal } = useCart();
+  const { isDark, setIsDark } = useTheme();
   const { isLoggedIn, userData, logout } = useUser();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isDark, setIsDark] = useState(
-    typeof window !== "undefined" &&
-      (localStorage.getItem("theme") === "dark" ||
-        (!localStorage.getItem("theme") &&
-          window.matchMedia("(prefers-color-scheme: dark)").matches))
-  );
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (isDark) {
-      root.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      root.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [isDark]);
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-white/10 bg-white/70 backdrop-blur-xl backdrop-saturate-150 dark:border-white/10 dark:bg-neutral-950/60">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-16 max-w-full justify-between align-center px-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <Link to="/" className="group flex items-center">
           <span className="text-xl font-semibold tracking-[0.2em] text-neutral-900 transition-opacity group-hover:opacity-70 dark:text-white">

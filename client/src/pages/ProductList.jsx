@@ -41,8 +41,8 @@ const ProductList = () => {
               </h1>
 
               <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-neutral-600 dark:text-neutral-400 sm:text-lg">
-                Discover premium products with a sleek and modern shopping
-                experience built for speed and simplicity.
+                Discover premium products with a sleek and modern shopping experience built for
+                speed and simplicity.
               </p>
 
               <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
@@ -67,7 +67,7 @@ const ProductList = () => {
         {/* Products */}
         <section
           id="products"
-          className="mx-auto w-full max-w-7xl px-6 py-16 sm:px-8 lg:px-12 lg:py-20"
+          className="mx-auto w-full max-w-auto px-6 py-16 sm:px-8 lg:px-12 lg:py-20"
         >
           <div className="mb-10 flex items-end justify-between">
             <div>

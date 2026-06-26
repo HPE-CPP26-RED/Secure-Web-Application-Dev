@@ -33,7 +33,7 @@ const Product = ({ product }) => {
       className="group relative block overflow-hidden rounded-2xl bg-white dark:bg-neutral-900 shadow-sm ring-1 ring-gray-200/50 dark:ring-neutral-800/40 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:ring-gray-300 dark:hover:ring-neutral-700"
     >
       <CardBody className="!p-0">
-        <div className="relative aspect-square w-full overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 dark:from-neutral-800 dark:to-neutral-900">
+        <div className="relative aspect-square w-full overflow-hidden bg-neutral-100 dark:bg-neutral-900 rounded-xl">
           <img
             src={product.image_url}
             alt={product.name}
@@ -55,7 +55,7 @@ const Product = ({ product }) => {
             <button
               disabled={isLoading}
               onClick={(e) => addToCart(e)}
-              className="flex items-center justify-center p-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/20 active:scale-95 transition-all duration-300 disabled:opacity-50"
+              className="flex items-center justify-center p-2.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white transition-colors duration-200 active:scale-95 disabled:opacity-50"
               aria-label="Add to cart"
             >
               {isLoading ? (

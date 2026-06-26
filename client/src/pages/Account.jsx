@@ -10,6 +10,7 @@ import {
   ModalHeader,
 } from "@windmill/react-ui";
 import AccountForm from "components/AccountForm";
+import { useTheme } from "context/ThemeContext";
 import { useUser } from "context/UserContext";
 import Layout from "layout/Layout";
 import { useState } from "react";
@@ -33,6 +34,7 @@ const Account = () => {
   const [mfaVerifyLoading, setMfaVerifyLoading] = useState(false);
   const [isRemoveMfaOpen, setIsRemoveMfaOpen] = useState(false);
   const [isRemoveMfaLoading, setIsRemoveMfaLoading] = useState(false);
+  // const { isDark } = useTheme();
 
   const resetPassword = () => {
     setIsSending(true);
@@ -141,13 +143,18 @@ const Account = () => {
       {showSettings ? (
         <AccountForm userData={userData} setShowSettings={setShowSettings} />
       ) : (
-        <div className="grid place-items-center pt-4 mt-10">
+        <div className="grid place-items-center pt-4 mt-1">
           <div className="w-full md:w-3/4 lg:w-1/2 shadow-md overflow-hidden sm:rounded-lg">
             <div className="px-4 py-5 sm:px-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">Profile</h3>
+              <h3
+                className="text-xl leading-6 font-medium 
+                  dark:text-white text-gray-900"
+              >
+                Profile
+              </h3>
               <p className="mt-1 max-w-2xl text-sm text-gray-500">Your personal information</p>
             </div>
-            <div className="border-t border-gray-200">
+            <div className="border-t border-gray-200 dark:rounded-lg">
               <dl>
                 <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                   <dt className="text-sm font-medium text-gray-500">Full name</dt>

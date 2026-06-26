@@ -25,11 +25,11 @@ const Cart = () => {
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-emerald-400/10 dark:bg-emerald-500/5 rounded-full blur-3xl animate-pulse pointer-events-none"></div>
           <div className="absolute bottom-1/3 left-1/2 -translate-x-1/2 translate-y-1/2 w-72 h-72 bg-teal-400/10 dark:bg-teal-500/5 rounded-full blur-3xl animate-pulse pointer-events-none [animation-delay:2s]"></div>
 
-          <div className="relative z-10 flex flex-col items-center max-w-md text-center p-8 bg-white/40 dark:bg-neutral-900/40 backdrop-blur-md border border-white/20 dark:border-neutral-800/40 rounded-2xl shadow-xl">
-            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 rounded-full mb-6 text-emerald-600 dark:text-emerald-400">
-              <ShoppingCart size={64} className="stroke-[1.5]" />
+          <div className="relative z-10 flex flex-col items-center max-w-md text-center p-8 bg-white/40 dark:bg-neutral-900/40 backdrop-blur-md border border-white/20 dark:border-neutral-800/40 rounded-2xl">
+            <div className="p-4 bg-white dark:white rounded-xl mb-6 text-emerald-600 dark:text-emerald-400">
+              <ShoppingCart size={64} className="stroke-[1.5]" stroke="dark:white black" />
             </div>
-            <h1 className="text-3xl font-extrabold mb-3 bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-extrabold mb-3 text-neutral-900 dark:text-white bg-clip-text ">
               Your Cart is Empty
             </h1>
             <p className="text-neutral-500 dark:text-neutral-400 mb-8 max-w-sm">
@@ -39,7 +39,7 @@ const Cart = () => {
             <Button
               tag={Link}
               to="/"
-              className="px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white font-semibold rounded-xl transition-all duration-300 shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/20"
+              className="px-8 py-3  bg-neutral-900 hover:bg-neutral-800 text-white font-semibold rounded-xl transition-all duration-300 shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/20"
             >
               Explore Products
             </Button>

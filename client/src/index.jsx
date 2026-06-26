@@ -8,6 +8,7 @@ import { ReviewProvider } from "context/ReviewContext";
 import { UserProvider } from "context/UserContext";
 import { createRoot } from "react-dom/client";
 import { HelmetProvider } from "react-helmet-async";
+import { ThemeProvider } from "context/ThemeContext";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
@@ -26,10 +27,12 @@ root.render(
             <ReviewProvider>
               <CartProvider>
                 <OrderProvider>
-                  <BrowserRouter>
-                    <GlobalHistory />
-                    <App />
-                  </BrowserRouter>
+                  <ThemeProvider>
+                    <BrowserRouter>
+                      <GlobalHistory />
+                      <App />
+                    </BrowserRouter>
+                  </ThemeProvider>
                 </OrderProvider>
               </CartProvider>
             </ReviewProvider>
