@@ -136,7 +136,7 @@ jobs:
       - name: Install Syft (SBOM generator)
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b /usr/local/bin
+            | sh -s -- -b /usr/local/bin v1.46.0
           syft version
 
       # Grype scans SBOMs for known CVEs using the Anchore vulnerability DB.
@@ -144,7 +144,7 @@ jobs:
       - name: Install Grype (vulnerability scanner)
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh \
-            | sh -s -- -b /usr/local/bin
+            | sh -s -- -b /usr/local/bin v0.114.0
           grype version
 
       # ── Stage 4: SBOM Generation ──────────────────────────────────────────────
@@ -162,14 +162,14 @@ jobs:
       - name: Generate SBOM — API image (pern-store-api-prod)
         run: |
           syft pern-store-api-prod:latest \
-            -o cyclonedx-json=artifacts/sbom/api.cdx.json \
+            -o cyclonedx-json@1.5=artifacts/sbom/api.cdx.json \
             -o table=artifacts/sbom/api.txt
 
       # Same for the client image built above.
       - name: Generate SBOM — Client image (pern-store-client)
         run: |
           syft pern-store-client:ci \
-            -o cyclonedx-json=artifacts/sbom/client.cdx.json \
+            -o cyclonedx-json@1.5=artifacts/sbom/client.cdx.json \
             -o table=artifacts/sbom/client.txt
 
       # Scan the nginx base image. It is pulled automatically when Syft inspects
@@ -178,14 +178,14 @@ jobs:
       - name: Generate SBOM — Nginx base image (nginx:1.25-alpine)
         run: |
           syft nginx:1.25-alpine \
-            -o cyclonedx-json=artifacts/sbom/nginx.cdx.json \
+            -o cyclonedx-json@1.5=artifacts/sbom/nginx.cdx.json \
             -o table=artifacts/sbom/nginx.txt
 
       # Scan the PostgreSQL base image for the same reason.
       - name: Generate SBOM — Postgres base image (postgres:16-alpine)
         run: |
           syft postgres:16-alpine \
-            -o cyclonedx-json=artifacts/sbom/postgres.cdx.json \
+            -o cyclonedx-json@1.5=artifacts/sbom/postgres.cdx.json \
             -o table=artifacts/sbom/postgres.txt
 
       # ── Stage 5: Vulnerability Scanning ──────────────────────────────────────
@@ -202,9 +202,9 @@ jobs:
 
       - name: Scan vulnerabilities — API image
         run: |
-          grype artifacts/sbom/api.cdx.json \
+          grype sbom:artifacts/sbom/api.cdx.json \
             -o json  > artifacts/vulnerabilities/api-vulns.json
-          grype artifacts/sbom/api.cdx.json \
+          grype sbom:artifacts/sbom/api.cdx.json \
             -o table > artifacts/vulnerabilities/api-vulns.txt
 
       - name: Scan vulnerabilities — Client image
