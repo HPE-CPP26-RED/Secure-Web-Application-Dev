@@ -92,26 +92,38 @@ const PaymentForm = ({ previousStep, addressData, nextStep }) => {
   };
 
   return (
-    <div className="w-full md:w-1/2">
-      <h1 className="text-3xl font-semibold text-center mb-2">Checkout</h1>
+    <div className="w-full md:w-1/2 max-w-lg mx-auto space-y-6">
+      <div className="text-center">
+        <h1 className="text-3xl font-semibold text-gray-900 dark:text-white">Checkout</h1>
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+          Review your order and complete your payment.
+        </p>
+      </div>
+
       <OrderSummary />
-      <h1 className="font-medium text-2xl">Pay with Razorpay</h1>
-      {error && <HelperText valid={false}>{error.message}</HelperText>}
-      <div className="flex justify-between py-4">
-        <Button onClick={previousStep} layout="outline" size="small">
-          Back
-        </Button>
-        <Button
-          disabled={isProcessing}
-          onClick={handlePayment}
-          size="small"
-        >
-          {isProcessing ? (
-            <PulseLoader size={10} color={"#01A982"} />
-          ) : (
-            `Pay ${formatCurrency(cartSubtotal)}`
-          )}
-        </Button>
+
+      <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-5 space-y-4">
+        <h2 className="text-xl font-medium text-gray-900 dark:text-white">Payment</h2>
+
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Secure payment powered by Razorpay.
+        </p>
+
+        {error && <HelperText valid={false}>{error.message}</HelperText>}
+
+        <div className="flex justify-between items-center pt-2">
+          <Button onClick={previousStep} layout="outline" size="small">
+            Back
+          </Button>
+
+          <Button disabled={isProcessing} onClick={handlePayment} size="small">
+            {isProcessing ? (
+              <PulseLoader size={10} color="#01A982" />
+            ) : (
+              `Pay ${formatCurrency(cartSubtotal)}`
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
