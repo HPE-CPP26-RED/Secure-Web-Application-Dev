@@ -1,0 +1,364 @@
+###############################################################################
+# .github/workflows/ci.yml — PERN-Store CI/CD Pipeline
+#
+# Trigger: Push to the CI/CD-pipeline branch, or manual dispatch
+#
+# ── CI Job (build-and-scan) ─────────────────────────────────────────────────
+# Stages:
+#   1. Checkout          — fetch source code
+#   2. Docker Build      — validate API + Client Dockerfiles build cleanly
+#   3. Install Tools     — Syft (SBOM) and Grype (vulnerability scanner)
+#   4. SBOM Generation   — CycloneDX JSON + human-readable table per image
+#   5. Vulnerability Scan— Grype scan of each SBOM (never fails on findings)
+#   6. Upload Artifacts  — SBOM + vulnerability reports downloadable from UI
+#
+# Failure policy:
+#   Build failure        → FAIL
+#   Syft failure         → FAIL
+#   Grype crash/error    → FAIL
+#   Vulnerabilities found→ PASS (reporting only, not a gate)
+#
+# ── CD Job (deploy) ──────────────────────────────────────────────────────────
+# Runs only after build-and-scan succeeds.
+# Requires manual approval via the GitHub 'production' environment gate.
+#
+# Stages:
+#   1. Configure SSH     — write PEM key, populate known_hosts via ssh-keyscan
+#   2. Update & Deploy   — git fetch + checkout <github.sha> + deploy.sh (as ubuntu)
+#   3. Health check      — docker ps + curl /health; fails job on any error
+#   4. Cleanup           — remove SSH private key (always runs)
+#
+# Required GitHub Secrets: EC2_HOST, EC2_USER, EC2_SSH_KEY
+# Required GitHub Environment: production  (configure required reviewers in UI)
+###############################################################################
+
+name: CI/CD — Build, Scan & Deploy
+
+on:
+  push:
+    branches:
+      # Run ONLY on the CI/CD-pipeline branch while the pipeline is being
+      # developed and validated. Change to 'main' (or add it) once stable.
+      - CI/CD-pipeline
+  workflow_dispatch:
+    # Allow manual runs from the GitHub Actions UI at any time.
+
+permissions:
+  contents: read      # Read-only access to the repository.
+  deployments: write  # Required for the 'production' environment gate to create deployment records.
+
+jobs:
+  build-and-scan:
+    name: Build · SBOM · Vulnerability Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30  # Guard against runaway builds or stuck network calls.
+
+    steps:
+
+      # ── Stage 1: Checkout ────────────────────────────────────────────────────
+      # Fetches the repository at the commit that triggered this workflow.
+      # fetch-depth: 1 keeps the clone shallow — we only need the current state,
+      # not the full git history.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ── Stage 2: Docker Build Validation ─────────────────────────────────────
+      # The docker-compose.yml uses env_file: ./server/.env for the api and
+      # postgres services. Docker Compose validates the env_file path at config
+      # parse time, so the file must exist even for a build-only run.
+      # We create a stub containing non-secret placeholder values — these are
+      # NEVER used at runtime and contain no real credentials.
+      - name: Create stub server/.env for Docker Compose build validation
+        run: |
+          cat > server/.env << 'ENVEOF'
+          NODE_ENV=production
+          PORT=9000
+          POSTGRES_HOST=postgres
+          POSTGRES_PORT=5432
+          POSTGRES_DB=pernstore
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=ci_stub_not_real
+          JWT_SECRET=ci_stub_jwt_secret_not_for_production
+          JWT_EXPIRES_IN=15m
+          JWT_REFRESH_EXPIRES_IN=7d
+          ALLOWED_ORIGINS=http://localhost
+          CLIENT_URL=http://localhost
+          LOG_LEVEL=info
+          MFA_ENCRYPTION_KEY=ci_stub_mfa_key_32_chars_pad0000
+          STRIPE_SECRET_KEY=sk_test_stub
+          RAZORPAY_KEY_ID=rzp_test_stub
+          RAZORPAY_KEY_SECRET=ci_stub_razorpay_secret
+          OAUTH_CLIENT_ID=stub.apps.googleusercontent.com
+          OAUTH_CLIENT_SECRET=ci_stub_oauth_secret
+          OAUTH_REFRESH_TOKEN=ci_stub_refresh_token
+          CLIENT_ID=stub.apps.googleusercontent.com
+          CLIENT_SECRET=ci_stub_client_secret
+          REFRESH_TOKEN=ci_stub_smtp_refresh_token
+          SMTP_FROM=noreply@example.com
+          SMTP_USER=smtp@example.com
+          ENVEOF
+
+      # Build the api service (the only service with a build: directive in
+      # docker-compose.yml). On success, the image pern-store-api-prod:latest
+      # is available locally. On failure, this step — and the entire pipeline —
+      # fails immediately.
+      - name: Build API Docker image via docker compose
+        run: docker compose build --no-cache
+        env:
+          DOCKER_BUILDKIT: "1"
+
+      # client/Dockerfile is not referenced in docker-compose.yml (the React
+      # dist/ is pre-built and volume-mounted into nginx in production), but the
+      # Dockerfile is part of the repository and must remain buildable.
+      # Vite bakes VITE_* variables at build time, so we supply stub values.
+      - name: Create stub client/.env for Vite build inside Docker
+        run: |
+          printf 'VITE_API_URL=http://localhost:9000\nVITE_GOOGLE_CLIENT_ID=stub\nVITE_RAZORPAY_KEY_ID=rzp_test_stub\n' \
+            > client/.env
+
+      - name: Build Client Docker image (standalone validation)
+        run: |
+          docker build \
+            --no-cache \
+            --tag pern-store-client:ci \
+            --file client/Dockerfile \
+            ./client
+        env:
+          DOCKER_BUILDKIT: "1"
+
+      # ── Stage 3: Install Security Tools ──────────────────────────────────────
+      # Syft generates SBOMs (Software Bill of Materials) from Docker images.
+      # Installing to /usr/local/bin makes it available globally in all
+      # subsequent steps without PATH manipulation.
+      - name: Install Syft (SBOM generator)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b /usr/local/bin v1.46.0
+          syft version
+
+      # Grype scans SBOMs for known CVEs using the Anchore vulnerability DB.
+      # It is installed separately from Syft so each tool failure is isolated.
+      - name: Install Grype (vulnerability scanner)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh \
+            | sh -s -- -b /usr/local/bin v0.114.0
+          grype version
+
+      # ── Stage 4: SBOM Generation ──────────────────────────────────────────────
+      # Create the directories that will hold all generated security artifacts.
+      # These are ephemeral — they exist only for the duration of this job run
+      # and are then uploaded as GitHub Actions artifacts.
+      - name: Create artifact output directories
+        run: |
+          mkdir -p artifacts/sbom
+          mkdir -p artifacts/vulnerabilities
+
+      # Generate a CycloneDX JSON SBOM plus a human-readable table for the
+      # custom-built API image. Failure here means Syft cannot inspect the
+      # image — the pipeline fails so we don't upload incomplete reports.
+      - name: Generate SBOM — API image (pern-store-api-prod)
+        run: |
+          syft pern-store-api-prod:latest \
+            -o cyclonedx-json@1.5=artifacts/sbom/api.cdx.json \
+            -o table=artifacts/sbom/api.txt
+
+      # Same for the client image built above.
+      - name: Generate SBOM — Client image (pern-store-client)
+        run: |
+          syft pern-store-client:ci \
+            -o cyclonedx-json@1.5=artifacts/sbom/client.cdx.json \
+            -o table=artifacts/sbom/client.txt
+
+      # Scan the nginx base image. It is pulled automatically when Syft inspects
+      # it (Syft pulls the image if not already present locally). nginx is part
+      # of the production stack and its packages should be tracked.
+      - name: Generate SBOM — Nginx base image (nginx:1.25-alpine)
+        run: |
+          syft nginx:1.25-alpine \
+            -o cyclonedx-json@1.5=artifacts/sbom/nginx.cdx.json \
+            -o table=artifacts/sbom/nginx.txt
+
+      # Scan the PostgreSQL base image for the same reason.
+      - name: Generate SBOM — Postgres base image (postgres:16-alpine)
+        run: |
+          syft postgres:16-alpine \
+            -o cyclonedx-json@1.5=artifacts/sbom/postgres.cdx.json \
+            -o table=artifacts/sbom/postgres.txt
+
+      # ── Stage 5: Vulnerability Scanning ──────────────────────────────────────
+      # Grype is invoked WITHOUT the --fail-on flag. Per Grype's documented
+      # default, omitting --fail-on causes it to exit 0 regardless of how many
+      # vulnerabilities are found. It exits non-zero only on execution errors
+      # (file not found, network failure, crash). This ensures:
+      #   • Found vulnerabilities → pipeline continues (reporting only)
+      #   • Grype cannot run      → pipeline fails    (broken tooling)
+      #
+      # Two output formats per image:
+      #   JSON  — machine-readable, consumable by downstream tools
+      #   table — human-readable, useful when browsing artifacts in the UI
+
+      - name: Scan vulnerabilities — API image
+        run: |
+          grype sbom:artifacts/sbom/api.cdx.json \
+            -o json  > artifacts/vulnerabilities/api-vulns.json
+          grype sbom:artifacts/sbom/api.cdx.json \
+            -o table > artifacts/vulnerabilities/api-vulns.txt
+
+      - name: Scan vulnerabilities — Client image
+        run: |
+          grype sbom:artifacts/sbom/client.cdx.json \
+            -o json  > artifacts/vulnerabilities/client-vulns.json
+          grype sbom:artifacts/sbom/client.cdx.json \
+            -o table > artifacts/vulnerabilities/client-vulns.txt
+
+      - name: Scan vulnerabilities — Nginx base image
+        run: |
+          grype sbom:artifacts/sbom/nginx.cdx.json \
+            -o json  > artifacts/vulnerabilities/nginx-vulns.json
+          grype sbom:artifacts/sbom/nginx.cdx.json \
+            -o table > artifacts/vulnerabilities/nginx-vulns.txt
+
+      - name: Scan vulnerabilities — Postgres base image
+        run: |
+          grype sbom:artifacts/sbom/postgres.cdx.json \
+            -o json  > artifacts/vulnerabilities/postgres-vulns.json
+          grype sbom:artifacts/sbom/postgres.cdx.json \
+            -o table > artifacts/vulnerabilities/postgres-vulns.txt
+
+      # ── Stage 6: Upload Artifacts ─────────────────────────────────────────────
+      # Artifacts are uploaded with if: always() so reports are preserved and
+      # downloadable from the GitHub Actions UI even when an earlier step fails.
+      # Each artifact set is named with the git SHA for traceability — you can
+      # correlate an artifact bundle to the exact commit that produced it.
+      # Retention: 30 days (configurable; GitHub's maximum is 90 days).
+
+      - name: Upload SBOM reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-reports-${{ github.sha }}
+          path: artifacts/sbom/
+          retention-days: 30
+
+      - name: Upload vulnerability reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerability-reports-${{ github.sha }}
+          path: artifacts/vulnerabilities/
+          retention-days: 30
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # CD Job — Deploy to Production
+  # ════════════════════════════════════════════════════════════════════════════
+  # This job only runs after build-and-scan succeeds (needs:).
+  # It is gated by the 'production' GitHub Environment — a required reviewer
+  # must approve in the GitHub Actions UI before any SSH command executes.
+  # If approval is rejected, the job fails immediately with no SSH connection.
+  deploy:
+    name: Deploy · Production (EC2)
+    runs-on: ubuntu-latest
+    needs: build-and-scan
+    timeout-minutes: 15
+    environment:
+      name: production
+
+    steps:
+
+      # ── Stage 1: Configure SSH ────────────────────────────────────────────────
+      # Writes the PEM private key to a temp file with strict permissions (600).
+      # ssh-keyscan adds the EC2 host fingerprint to known_hosts so that
+      # StrictHostKeyChecking=yes is satisfied without an interactive prompt.
+      # BatchMode=yes disables all password/passphrase fallback — the job fails
+      # immediately on key auth failure rather than hanging.
+      - name: Configure SSH key and known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 644 ~/.ssh/known_hosts
+
+      # ── Stage 2: Update repository and deploy on EC2 ───────────────────────
+      # SSH authenticates as ubuntu, who owns the repository.
+      # Git operations run directly as ubuntu — no sudo wrapper needed.
+      #
+      # deploy.sh is invoked as ubuntu. It uses sudo internally only for
+      # the two commands that genuinely require root: chmod on the
+      # Let's Encrypt certificate directories. All other operations
+      # (npm build, docker compose, aws ssm) run as ubuntu.
+      #
+      # 'set -euo pipefail' ensures any failure (fetch, checkout, or
+      # deploy.sh) propagates immediately through SSH and fails this step.
+      #
+      # github.sha is expanded by GitHub Actions before the SSH command
+      # is sent, so the EC2 shell receives a literal 40-character hex
+      # string — no variable expansion or injection risk on the remote side.
+      - name: Update repository and deploy on EC2
+        run: |
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            "set -euo pipefail; cd /home/ubuntu/Secure-Web-Application-Dev && git fetch origin && git checkout ${{ github.sha }} && /home/ubuntu/Secure-Web-Application-Dev/deploy.sh"
+
+      # ── Stage 3: Health Check ────────────────────────────────────────────────
+      # Waits 30 seconds for containers to stabilise (postgres start_period is
+      # 30s; by the time deploy.sh returns, compose health checks have resolved,
+      # but we add this buffer for nginx reload to complete).
+      #
+      # Two checks are run inside a single SSH session:
+      #   a) docker inspect — verifies each production container is 'running'
+      #      (not 'restarting' or 'exited'). pern-adminer is excluded as it is
+      #      a non-critical development convenience service.
+      #   b) curl /health  — the nginx-served health endpoint at
+      #      server/config/nginx.conf:137 must return HTTP 200.
+      #
+      # 'set -e' at the start of the remote shell means any failure exits the
+      # SSH session non-zero, which fails this GitHub Actions step.
+      - name: Post-deployment health check
+        run: |
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            "
+            set -e
+
+            echo '--- Waiting 30s for containers to stabilise ---'
+            sleep 30
+
+            echo '--- docker ps ---'
+            docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+
+            echo '--- Verifying expected containers are running ---'
+            for container in pern-prod-nginx pern-prod-api pern-prod-db; do
+              STATUS=\$(docker inspect --format='{{.State.Status}}' \"\$container\" 2>/dev/null || echo 'missing')
+              if [ \"\$STATUS\" != 'running' ]; then
+                echo \"ERROR: container \$container is \$STATUS\" >&2
+                exit 1
+              fi
+              echo \"OK: \$container is running\"
+            done
+
+            echo '--- HTTP health check (nginx /health) ---'
+            HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost/health)
+            if [ \"\$HTTP_CODE\" != '200' ]; then
+              echo \"ERROR: /health returned HTTP \$HTTP_CODE\" >&2
+              exit 1
+            fi
+            echo \"OK: /health returned HTTP 200\"
+            "
+
+      # ── Stage 4: Cleanup SSH Key ─────────────────────────────────────────────
+      # Runs with if: always() to ensure the PEM is removed even when an earlier
+      # step fails. The GitHub-hosted runner VM is ephemeral and destroyed after
+      # the job, but explicit removal is defence-in-depth and signals intent.
+      - name: Remove SSH private key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
