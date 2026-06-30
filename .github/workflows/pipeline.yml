@@ -24,7 +24,7 @@
 #
 # Stages:
 #   1. Configure SSH     — write PEM key, populate known_hosts via ssh-keyscan
-#   2. Update & Deploy   — sudo bash: git fetch + checkout <github.sha> + deploy.sh (atomic)
+#   2. Update & Deploy   — git fetch + checkout <github.sha> + deploy.sh (as ubuntu)
 #   3. Health check      — docker ps + curl /health; fails job on any error
 #   4. Cleanup           — remove SSH private key (always runs)
 #
@@ -282,22 +282,21 @@ jobs:
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
           chmod 644 ~/.ssh/known_hosts
 
-      # ── Stage 2: Update repository and deploy on EC2 (atomic, privileged) ────
-      # The repository at /home/ubuntu/Secure-Web-Application-Dev is owned by
-      # 'ubuntu'. The 'github-deploy' SSH user does not have write permission
-      # to that directory, so git fetch/checkout must run under sudo.
+      # ── Stage 2: Update repository and deploy on EC2 ───────────────────────
+      # SSH authenticates as ubuntu, who owns the repository.
+      # Git operations run directly as ubuntu — no sudo wrapper needed.
       #
-      # Both the repository update and deployment are combined into a single
-      # 'sudo bash -c' invocation so they execute in the same privileged shell.
-      # This is atomic: there is no window between checkout and deployment where
-      # the working tree could be in a different state.
+      # deploy.sh is invoked as ubuntu. It uses sudo internally only for
+      # the two commands that genuinely require root: chmod on the
+      # Let's Encrypt certificate directories. All other operations
+      # (npm build, docker compose, aws ssm) run as ubuntu.
       #
-      # 'set -euo pipefail' ensures any failure (fetch, checkout, or deploy.sh)
-      # exits non-zero, propagating through SSH and failing this step immediately.
+      # 'set -euo pipefail' ensures any failure (fetch, checkout, or
+      # deploy.sh) propagates immediately through SSH and fails this step.
       #
-      # github.sha is expanded by GitHub Actions before the SSH command is sent,
-      # so the EC2 shell receives a hardcoded 40-character hex string — no
-      # variable expansion or injection risk on the remote side.
+      # github.sha is expanded by GitHub Actions before the SSH command
+      # is sent, so the EC2 shell receives a literal 40-character hex
+      # string — no variable expansion or injection risk on the remote side.
       - name: Update repository and deploy on EC2
         run: |
           ssh \
@@ -305,7 +304,7 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o BatchMode=yes \
             "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
-            "sudo bash -c 'set -euo pipefail; cd /home/ubuntu/Secure-Web-Application-Dev && git fetch origin && git checkout ${{ github.sha }} && sudo /home/ubuntu/Secure-Web-Application-Dev/deploy.sh'"
+            "set -euo pipefail; cd /home/ubuntu/Secure-Web-Application-Dev && git fetch origin && git checkout ${{ github.sha }} && /home/ubuntu/Secure-Web-Application-Dev/deploy.sh"
 
       # ── Stage 3: Health Check ────────────────────────────────────────────────
       # Waits 30 seconds for containers to stabilise (postgres start_period is
