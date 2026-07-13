@@ -17,9 +17,10 @@ class AuthService {
   }
 
   logout() {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
-    localStorage.removeItem("expiresAt");
+    // Revokes the refresh token server-side and clears the accessToken /
+    // refreshToken HttpOnly cookies. Required — the cookies aren't reachable
+    // from JS, so there's no client-side way to end the session.
+    return API.post("/auth/logout");
   }
 
   forgotPassword(email) {

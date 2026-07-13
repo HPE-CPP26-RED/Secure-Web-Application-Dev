@@ -7,29 +7,40 @@ const UserContext = createContext();
 
 const UserProvider = ({ children }) => {
   const [userData, setUserData] = useState(null);
-  const [authData, setAuthData] = useState({
-    token: "",
-  });
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // True until the initial getCurrentUser() check resolves. ProtectedRoute
+  // must not redirect while this is true, otherwise a valid session gets
+  // treated as logged-out on every full page reload.
+  const [authLoading, setAuthLoading] = useState(true);
 
+  // The JWT lives in a Secure HttpOnly cookie, which JS cannot read. The only
+  // way to know if a session is still valid after a reload is to ask the
+  // backend, so every app start calls GET /users/profile once. The browser
+  // attaches the accessToken cookie automatically (withCredentials: true).
   useEffect(() => {
-    if (isLoggedIn) {
-      authService.getCurrentUser().then((res) => setUserData(res?.data));
-    }
-  }, [isLoggedIn]);
+    let isMounted = true;
 
-  useEffect(() => {
-    const storedToken = localStorage.getItem("token");
-    if (storedToken && storedToken !== "undefined") {
-      try {
+    authService
+      .getCurrentUser()
+      .then((res) => {
+        if (!isMounted) return;
+        setUserData(res?.data ?? null);
         setIsLoggedIn(true);
-        setAuthData(JSON.parse(storedToken));
-      } catch (err) {
-        localStorage.removeItem("token");
-      }
-    } else if (storedToken === "undefined") {
-      localStorage.removeItem("token");
-    }
+      })
+      .catch(() => {
+        // 401/403/expired/invalid token, or the check couldn't complete —
+        // fail closed and treat the visitor as logged out.
+        if (!isMounted) return;
+        setUserData(null);
+        setIsLoggedIn(false);
+      })
+      .finally(() => {
+        if (isMounted) setAuthLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const updateUserData = async ({ fullname, email, username, address, city, state, country }) => {
@@ -46,20 +57,23 @@ const UserProvider = ({ children }) => {
   };
 
   const setUserInfo = (data) => {
-    const { user, token } = data;
+    const { user } = data;
     setIsLoggedIn(true);
     setUserData(user);
-    if (token) {
-      setAuthData({ token });
-      localStorage.setItem("token", JSON.stringify(token));
-    }
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUserData(null);
-    setAuthData(null);
     setIsLoggedIn(false);
-    authService.logout();
+    try {
+      // Tells the backend to revoke the refresh token and clear both
+      // HttpOnly cookies. Without this call the cookies remain valid and
+      // getCurrentUser() would silently log the user back in on next reload.
+      await authService.logout();
+    } catch {
+      // Best-effort: local state is already cleared, so the UI is correct
+      // either way even if the network call fails.
+    }
   };
 
   return (
@@ -71,8 +85,7 @@ const UserProvider = ({ children }) => {
         logout,
         isLoggedIn,
         setIsLoggedIn,
-        authData,
-        setAuthData,
+        authLoading,
         updateUserData,
       }}
     >
